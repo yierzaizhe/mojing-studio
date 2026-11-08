@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>墨境 Studio · 公开版浏览器回归</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#17191d;color:#dce1e8;font:14px/1.65 system-ui,sans-serif}main{max-width:1460px;margin:auto;padding:26px}h1{font-size:24px;margin:0 0 8px}p{color:#a5afbd;margin:8px 0 14px}button{padding:8px 14px;background:#2b3342;color:#e5ecf8;border:1px solid #46536a;border-radius:5px;cursor:pointer}button:disabled{opacity:.5}a{color:#8dbbff}#summary{padding:13px 16px;background:#252a34;border:1px solid #3d485a;margin:16px 0}.pass{color:#80ddb0}.fail{color:#ff8b8b}.running{color:#8dbbff}li{padding:5px 0}iframe{display:block;width:100%;height:810px;border:1px solid #535a66;background:#292929}pre{font:12px/1.6 ui-monospace,monospace;padding:16px;background:#101216;white-space:pre-wrap;overflow-wrap:anywhere}.note{font-size:12px}
+</style>
+<main>
+<h1>公开版浏览器回归</h1>
+<p>通过交付 HTML 的真实文件输入和拖放事件检查公开版格式边界。AI、PDF 及伪装 MIME 文件应在读取前拒绝；仓库自制 PSD、SVG、PNG 应正常混合导入。</p>
+<button id="run">重新运行</button> <button id="save">保存验收 JSON</button> <a href="../index.html">返回工具</a>
+<div id="summary" aria-live="polite">准备验收…</div><ol id="checks"></ol>
+<p class="note">验收会监测应用窗口中的文件读取、图片解码及 Worker 创建入口；最终保留三份自制示例标签。</p>
+<iframe id="preview" title="墨境 Studio 公开版真实工作区"></iframe>
+<pre id="result">{}</pre>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id),records=[];
+  const assert=(value,message)=>{if(!value)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  let busy=false,win,doc,files,ids,rejectedNames,reads,workerCreations,bodyBytes;
+  const el=id=>doc.getElementById(id),canvas=()=>el('stage-canvas'),viewport=()=>el('canvas-viewport');
+  const tabs=()=>[...doc.querySelectorAll('#document-tabs .document-tab-item[data-document-id]')];
+  const active=()=>doc.querySelector('#document-tabs .document-tab-item.active');
+  const title=node=>node?.querySelector('[role="tab"]')?.textContent.trim()||'';
+  const tabNamed=name=>tabs().find(node=>title(node).includes(name));
+  const idle=()=>viewport().getAttribute('aria-busy')==='false'&&el('loading-overlay').hidden;
+  function update(){const r={done:!busy,passed:records.filter(x=>x.pass).length,failed:records.filter(x=>!x.pass).length,checks:records};window.__publicBrowserResult=r;$('result').textContent=JSON.stringify(r,null,2);$('summary').textContent=`${busy?'运行中':'验收结束'} · ${r.passed} 项通过 · ${r.failed} 项失败`;$('summary').className=r.failed?'fail':busy?'running':'pass';$('run').disabled=busy;}
+  async function check(name,fn){const li=document.createElement('li'),started=performance.now();li.className='running';li.textContent=`运行 · ${name}`;$('checks').append(li);try{const detail=await fn();records.push({name,pass:true,ms:Math.round(performance.now()-started),...(detail===undefined?{}:{detail})});li.className='pass';li.textContent=`PASS · ${name}`;}catch(error){records.push({name,pass:false,ms:Math.round(performance.now()-started),error:error.message});li.className='fail';li.textContent=`FAIL · ${name} · ${error.message}`;}update();}
+  async function until(fn,message,timeout=25000){const start=performance.now();while(performance.now()-start<timeout){const value=fn();if(value)return value;await sleep(25);}throw new Error(`等待超时：${message}`);}
+  function settle(){return new Promise(resolve=>{const fallback=setTimeout(resolve,160);win.requestAnimationFrame(()=>win.requestAnimationFrame(()=>{clearTimeout(fallback);resolve();}));});}
+  async function committed(){await until(()=>!canvas().hidden&&canvas().width>1&&idle(),'当前文档画面提交');await settle();}
+  async function allLoaded(count){await until(()=>tabs().length===count,`${count} 个支持格式标签出现`);await until(()=>!tabs().some(t=>t.matches('.queued,.loading')),`全部 ${count} 个标签完成读取`);await committed();assert(!tabs().some(t=>t.classList.contains('failed')),'支持格式出现失败标签');}
+  function importFiles(list){const transfer=new win.DataTransfer();list.forEach(file=>transfer.items.add(file));el('file-input').files=transfer.files;el('file-input').dispatchEvent(new win.Event('change',{bubbles:true}));}
+  function dropFiles(list){const transfer=new win.DataTransfer();list.forEach(file=>transfer.items.add(file));doc.dispatchEvent(new win.DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));}
+  async function activate(id){const node=tabs().find(t=>t.dataset.documentId===id);assert(node,'目标标签不存在');node.querySelector('[role="tab"]').click();await until(()=>active()?.dataset.documentId===id,'目标标签激活');await committed();}
+  function pixels(){const c=canvas();return{width:c.width,height:c.height,data:c.getContext('2d').getImageData(0,0,c.width,c.height).data};}
+  function samePixels(before,message){const after=pixels();assert(before.width===after.width&&before.height===after.height,`${message}：尺寸变化`);for(let i=0;i<before.data.length;i++)if(before.data[i]!==after.data[i])throw new Error(`${message}：第 ${i} 通道变化`);}
+  function point(u,v){const c=canvas();return[...c.getContext('2d').getImageData(Math.min(c.width-1,Math.floor(u*c.width)),Math.min(c.height-1,Math.floor(v*c.height)),1,1).data];}
+  function instrumentReads(){
+    reads=[];workerCreations=0;rejectedNames=new Set();
+    const watch=(entry,value)=>{if(rejectedNames.has(value?.name))reads.push({entry,name:value.name,type:value.type});};
+    // Preserve the actual browser implementations. Monitoring only records
+    // calls for excluded test files and never substitutes a successful decode.
+    for(const method of ['arrayBuffer','slice','stream','text']){
+      const original=win.Blob.prototype[method];if(typeof original!=='function')continue;
+      Object.defineProperty(win.File.prototype,method,{configurable:true,writable:true,value:function(...args){watch(method,this);return Reflect.apply(original,this,args);}});
+    }
+    const originalRead=win.FileReader.prototype.readAsArrayBuffer;
+    win.FileReader.prototype.readAsArrayBuffer=function(file){watch('FileReader.readAsArrayBuffer',file);return Reflect.apply(originalRead,this,[file]);};
+    const originalBitmap=win.createImageBitmap;
+    win.createImageBitmap=function(value,...args){watch('createImageBitmap',value);return Reflect.apply(originalBitmap,win,[value,...args]);};
+    const NativeWorker=win.Worker;
+    function TrackedWorker(...args){workerCreations++;return new NativeWorker(...args);}
+    Object.setPrototypeOf(TrackedWorker,NativeWorker);TrackedWorker.prototype=NativeWorker.prototype;win.Worker=TrackedWorker;
+  }
+  function excluded(name,type){rejectedNames.add(name);return new win.File([bodyBytes],name,{type});}
+  function rejectedInputCases(){return[
+    excluded('excluded-postscript.ai','application/postscript'),
+    excluded('image-mime-disguise.AI','image/png'),
+    excluded('excluded-document.pdf','application/pdf'),
+    excluded('image-mime-disguise.pdf','image/jpeg'),
+    excluded('postscript-mime-disguise.png','application/postscript'),
+    excluded('pdf-mime-disguise.svg','application/pdf'),
+  ];}
+  async function rejectedWithoutChanges(list,send){
+    const before={tabs:tabs().map(t=>t.dataset.documentId),active:active()?.dataset.documentId,workers:workerCreations,reads:reads.length};
+    send(list);await settle();await sleep(180);
+    assert(JSON.stringify(tabs().map(t=>t.dataset.documentId))===JSON.stringify(before.tabs),'不支持的文件增加了文档标签');
+    assert(active()?.dataset.documentId===before.active,'拒绝导入改变当前标签');
+    assert(workerCreations===before.workers,'拒绝前已经创建了解析 Worker');
+    assert(reads.length===before.reads,`拒绝前已经读取文件：${JSON.stringify(reads.slice(before.reads))}`);
+    assert(/未导入|不支持/.test(el('toast').textContent)&&/PSD/.test(el('toast').textContent)&&/SVG/.test(el('toast').textContent),'拒绝后缺少清楚的支持格式说明');
+    assert(idle(),'拒绝后应用残留 busy 状态');
+    return{rejected:list.map(file=>({name:file.name,type:file.type})),newTabs:0,newWorkers:0,fileReads:0};
+  }
+  async function makeFiles(){
+    const raw=win.atob(el('demo-psd-data').textContent.trim()),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    const psd=new win.File([bytes],'public-fixture-design.psd',{type:'image/vnd.adobe.photoshop'});
+    const response=await fetch('svg-sample.svg');assert(response.ok,'仓库 SVG fixture 缺失');const svg=new win.File([await response.blob()],'public-fixture-vector.svg',{type:'image/svg+xml'});
+    const source=document.createElement('canvas');source.width=240;source.height=180;const ctx=source.getContext('2d');ctx.fillStyle='#2a83bd';ctx.fillRect(48,36,144,108);ctx.fillStyle='rgba(244,154,61,.5)';ctx.fillRect(16,128,40,32);
+    const blob=await new Promise((resolve,reject)=>source.toBlob(value=>value?resolve(value):reject(new Error('自制 PNG fixture 创建失败')),'image/png'));
+    bodyBytes=new Uint8Array(await blob.arrayBuffer());const png=new win.File([blob],'public-fixture-transparent.png',{type:'image/png'});
+    return{psd,svg,png};
+  }
+  async function initialize(){
+    const response=await fetch('../index.html',{cache:'no-store'});assert(response.ok,'请先 npm run build 并启动本地预览');const html=await response.text();
+    const iframe=$('preview'),loaded=new Promise(resolve=>iframe.addEventListener('load',resolve,{once:true}));iframe.srcdoc=html;await loaded;win=iframe.contentWindow;doc=iframe.contentDocument;
+    await until(()=>el('file-input')?.onchange&&el('open-btn')?.onclick,'应用真实事件绑定');instrumentReads();files=await makeFiles();ids={};
+  }
+  async function run(){
+    if(busy)return;busy=true;records.length=0;$('checks').replaceChildren();update();
+    try{
+      await check('公开交付页就绪，文件选择器不再宣称支持 AI 或 PDF',async()=>{
+        await initialize();assert(tabs().length===0,'初始窗口残留标签');assert(el('file-input').multiple,'文件选择器缺少多选');
+        const accept=el('file-input').accept;assert(!/(?:^|,)\s*\.(?:ai|pdf)(?:\s*,|$)/i.test(accept),'选择器仍允许排除的格式');
+        assert(!el('ai-artboard-select')&&!el('ai-artboard-control'),'公开版残留不可用画板控件');
+        assert(!win.LayerDeskAiDocument&&!el('ai-adapter-source')&&!el('pdfjs-source')&&!el('ai-native-worker-source'),'公开版仍装载排除的解析器');
+        assert(/PSD/.test(doc.querySelector('.app-description').textContent)&&!/\bAI\b|PDF/.test(doc.querySelector('.app-description').textContent),'工作台格式说明不准确');
+        return{accept,initialTabs:tabs().length};
+      });
+      if(!doc||!files)return;
+      await check('文件输入拒绝 AI、PDF 及伪装 image MIME，且没有读取文件或建立标签',async()=>rejectedWithoutChanges(rejectedInputCases(),importFiles));
+      await check('拖放入口同样在读取前拒绝不支持文件',async()=>rejectedWithoutChanges([
+        excluded('dropped-image-disguise.ai','image/webp'),
+        excluded('dropped-image-disguise.pdf','image/png'),
+        excluded('dropped-pdf-mime.png','application/pdf'),
+      ],dropFiles));
+      await check('混合批次忽略不支持文件，PSD、SVG、PNG 成功建立三个独立标签',async()=>{
+        importFiles([excluded('mixed-disguise.ai','image/png'),files.psd,files.svg,excluded('mixed-disguise.pdf','image/jpeg'),files.png]);await allLoaded(3);
+        for(const [kind,file]of Object.entries(files)){const node=tabNamed(file.name);assert(node,`没有导入 ${file.name}`);ids[kind]=node.dataset.documentId;}
+        assert(new Set(Object.values(ids)).size===3,'支持格式共享了同一个文档 ID');assert(reads.length===0,`混合导入读取了排除文件：${JSON.stringify(reads)}`);
+        assert(!tabs().some(node=>/\.ai$|\.pdf$/i.test(title(node))),'排除文件进入了标签列表');
+        return{documents:tabs().map(node=>({id:node.dataset.documentId,name:title(node)})),rejectedFileReads:reads.length};
+      });
+      await check('PSD 图层、SVG 元素与透明 PNG 都显示真实内容',async()=>{
+        await activate(ids.psd);assert(el('layer-count').textContent==='22','PSD 自制示例的图层结构不完整');const psdBlue=point(.66,.1733);assert(psdBlue[2]>170&&psdBlue[2]>psdBlue[0],'PSD 画面不是自制设计');
+        await activate(ids.svg);const svgNodes=Number(el('layer-count').textContent);assert(svgNodes>=20,'SVG 元素树没有解析');assert(el('mode-select').querySelector('[value="original"]').textContent.includes('SVG'),'SVG 没有对应预览模式');const svgBlue=point(.7,.1867);assert(svgBlue[2]>170&&svgBlue[2]>svgBlue[0],'SVG 没有显示真实矢量画面');
+        await activate(ids.png);assert(el('layer-count').textContent==='1','PNG 不是独立图片文档');const corner=point(0,0),center=point(.5,.5);assert(corner[3]===0&&center[3]===255&&center[2]>100,'PNG 像素或透明边缘丢失');
+        return{psdNodes:22,svgNodes,psdBlue,svgBlue,pngCorner:corner,pngCenter:center};
+      });
+      await check('假菜单和占位工具不存在，保留的选择、平移及缩放控件可实际操作',async()=>{
+        assert(!doc.querySelector('.menu-bar,.menubar,[data-placeholder],[data-coming-soon],.fake-control'),'公开版残留假菜单或占位控件');
+        const ids=[...doc.querySelectorAll('.tool-rail button')].map(button=>button.id);assert(JSON.stringify(ids.slice().sort())===JSON.stringify(['tool-select','tool-hand','tool-zoom','fit-btn','actual-btn'].sort()),'画布工具栏包含未实现或重复工具');
+        for(const id of ids)assert(typeof el(id).onclick==='function',`${id} 没有真实事件绑定`);
+        el('tool-hand').click();assert(el('tool-hand').getAttribute('aria-pressed')==='true','平移工具不能激活');el('tool-select').click();assert(el('tool-select').getAttribute('aria-pressed')==='true','选择工具不能激活');
+        el('actual-btn').click();await settle();const actual=el('zoom-label').textContent;el('zoom-in').click();await settle();assert(el('zoom-label').textContent!==actual,'放大按钮没有改变缩放');el('zoom-out').click();await settle();assert(el('zoom-label').textContent===actual,'缩小按钮没有恢复缩放');el('fit-btn').click();await settle();
+        el('help-btn').click();assert(el('help-dialog').open,'帮助按钮不能打开内容');el('help-close').click();assert(!el('help-dialog').open,'帮助无法关闭');
+        return{implementedTools:ids,remainingTabs:tabs().length};
+      });
+      await check('已有作品打开时拒绝新的 AI、PDF，当前标签与像素保持完整',async()=>{
+        await activate(ids.png);const before=pixels();const detail=await rejectedWithoutChanges([
+          excluded('after-open.ai','image/png'),excluded('after-open.pdf','image/png'),excluded('after-open-mime.jpg','application/postscript'),
+        ],dropFiles);samePixels(before,'拒绝新文件改变已有作品');assert(tabs().length===3&&active()?.dataset.documentId===ids.png,'已有三个支持格式标签发生变化');return{...detail,preservedDocument:title(active())};
+      });
+    }catch(error){await check('公开版浏览器验收流程异常',()=>{throw error;});}
+    finally{busy=false;update();}
+  }
+  $('run').onclick=run;
+  $('save').onclick=()=>{const blob=new Blob([$('result').textContent],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='public-browser-results.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+  run();
+})();
+</script>
+</html>

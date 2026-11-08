@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="墨境 Studio，本地 PSD / SVG / 图片工作台。浏览真实图层、使用七款图片滤镜，并导出带水印的 PNG / JPG，文件在本机处理。">
+  <title>墨境 Studio · PSD / SVG / 图片工作台</title>
+  <!--STYLES-->
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2M3 7v12a1 1 0 0 0 1 1h15l3-9H7l-3 9"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8Z"/><path d="m2 12 10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V4h16v3M12 4v16M8 20h8"/></symbol>
+    <symbol id="i-shape" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 4v16"/></symbol>
+    <symbol id="i-smart" viewBox="0 0 24 24"><path d="m12 3 9 5v9l-9 5-9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v9m-4-17 9 5"/></symbol>
+    <symbol id="i-adjustment" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 4a8 8 0 0 1 0 16" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.8 5.2A11 11 0 0 1 12 5c6.5 0 10 7 10 7a17.3 17.3 0 0 1-3 3.7M6.3 6.3A18.5 18.5 0 0 0 2 12s3.5 7 10 7a11 11 0 0 0 5.7-1.7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 8.5a3 3 0 0 1 5.6 1.3c0 2.2-2.8 2.2-2.8 4M12 17h.01"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></symbol>
+    <symbol id="i-actual" viewBox="0 0 24 24"><path d="m4 8 3-3v14m8-11 3-3v14"/></symbol>
+    <symbol id="i-select" viewBox="0 0 24 24"><path d="m5 3 14 10-7 1-3 7Z"/><path d="m12 14 4 7"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 12V5a1.5 1.5 0 0 1 3 0v6-8a1.5 1.5 0 0 1 3 0v8-6a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v7c0 4-2.5 7-6 7h-1c-2.5 0-4-1.2-5.5-3L4 14.8A1.8 1.8 0 0 1 6.7 12l1.3 1.3"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m5 9 7 7 7-7"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="m7 8 5-5 5 5M7 16l5 5 5-5M5 12h14"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="m7 3 5 5 5-5M7 21l5-5 5 5M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-studio" viewBox="0 0 24 24"><path d="m4 18 5-12 3 7 3-7 5 12M7 18h10"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="app-bar">
+      <div class="wordmark" aria-label="墨境 Studio">
+        <span class="app-logo" aria-hidden="true"><svg class="icon"><use href="#i-studio"/></svg></span>
+        <span class="studio-wordmark">墨境 <span class="wordmark-light">Studio</span></span>
+      </div>
+      <span class="app-divider" aria-hidden="true"></span>
+      <span class="app-description">PSD / SVG / 图片工作台</span>
+      <span class="local-badge"><span class="local-dot"></span>本地 · 离线</span>
+      <button id="help-btn" class="icon-button help-button" type="button" title="使用帮助" aria-label="使用帮助"><svg class="icon"><use href="#i-help"/></svg><span>帮助</span></button>
+    </header>
+
+    <nav class="options-bar" aria-label="文件与预览工具">
+      <div class="options-group file-actions">
+        <button id="open-btn" class="button button-primary" type="button" title="打开 PSD、PSB、SVG、PNG、JPG 等文件，可一次多选"><svg class="icon"><use href="#i-open"/></svg>打开文件</button>
+        <button id="demo-btn" class="button button-quiet" type="button"><svg class="icon"><use href="#i-layers"/></svg>查看示例</button>
+        <input id="file-input" type="file" accept=".psd,.psb,.svg,image/*" multiple hidden>
+      </div>
+      <span class="toolbar-divider" aria-hidden="true"></span>
+      <div class="options-group preview-options">
+        <label for="mode-select">预览</label>
+        <div class="select-wrap"><select id="mode-select" disabled><option value="original">原始合成</option><option value="composite">图层合成</option><option value="layer">当前图层</option></select><svg class="icon"><use href="#i-chevron-down"/></svg></div>
+      </div>
+      <div class="toolbar-spacer"></div>
+      <button id="export-btn" class="button button-secondary" type="button" disabled><svg class="icon"><use href="#i-download"/></svg><span>导出图片</span></button>
+    </nav>
+
+    <main class="workspace">
+      <aside class="tool-rail" aria-label="画布工具">
+        <button id="tool-select" class="tool-button active" type="button" title="选择图层 · V；Alt + 点击切换重叠图层" aria-label="选择图层" aria-pressed="true"><svg class="icon"><use href="#i-select"/></svg></button>
+        <button id="tool-hand" class="tool-button" type="button" title="平移画布 · H / 空格" aria-label="平移画布" aria-pressed="false"><svg class="icon"><use href="#i-hand"/></svg></button>
+        <button id="tool-zoom" class="tool-button" type="button" title="缩放工具" aria-label="缩放工具" aria-pressed="false"><svg class="icon"><use href="#i-zoom"/></svg></button>
+        <span class="rail-divider"></span>
+        <button id="fit-btn" class="tool-button" type="button" title="适应窗口 · 0" aria-label="适应窗口"><svg class="icon"><use href="#i-fit"/></svg></button>
+        <button id="actual-btn" class="tool-button" type="button" title="实际大小 · 1" aria-label="实际大小"><svg class="icon"><use href="#i-actual"/></svg></button>
+        <div class="rail-spacer"></div>
+        <span class="rail-label" aria-hidden="true">墨</span>
+      </aside>
+
+      <section class="document-workspace" aria-label="文档预览">
+        <div class="document-strip"><div id="document-tabs" class="document-tabs" role="tablist" aria-label="打开的文档"><span id="document-tab" class="document-tabs-empty">未打开文件</span></div><div class="document-strip-fill"></div><button id="canvas-settings-btn" class="canvas-settings-button" type="button" popovertarget="canvas-settings-popover" aria-label="画布显示设置" title="画布背景与透明网格"><svg class="icon"><use href="#i-shape"/></svg><span>画布</span><svg class="icon canvas-settings-chevron"><use href="#i-chevron-down"/></svg></button></div>
+        <div id="canvas-settings-popover" class="canvas-settings-popover" popover aria-labelledby="canvas-settings-title">
+          <div class="canvas-settings-title" id="canvas-settings-title"><svg class="icon"><use href="#i-shape"/></svg>画布显示</div>
+          <label for="canvas-background-select">工作区背景</label>
+          <select id="canvas-background-select"><option value="dark" selected>深灰</option><option value="medium">中灰</option><option value="light">浅灰</option><option value="black">黑色</option></select>
+          <label for="checker-size-select">透明网格</label>
+          <select id="checker-size-select"><option value="none">关闭</option><option value="small">小 · 4 px</option><option value="medium" selected>中 · 8 px</option><option value="large">大 · 16 px</option></select>
+          <p>背景与网格仅用于预览</p>
+        </div>
+        <div id="notice-area" class="notice-area" role="status" aria-live="polite" hidden></div>
+        <div id="canvas-viewport" tabindex="0" aria-label="画布：点击图形选择对应图层，Alt 加点击切换重叠图层，按住空格拖动平移">
+          <div id="canvas-paper" class="stage-paper" aria-hidden="true" hidden></div>
+          <canvas id="stage-canvas" width="1" height="1" aria-label="文档预览"></canvas>
+          <div id="canvas-render-status" class="canvas-render-status" role="status" aria-live="polite" hidden>正在更新预览…</div>
+          <div id="empty-state" class="empty-state">
+            <div class="empty-content">
+              <div class="document-illustration" aria-hidden="true">
+                <div class="illustration-layer illustration-layer-back"></div>
+                <div class="illustration-layer illustration-layer-middle"></div>
+                <div class="illustration-document"><span class="illustration-fold"></span><span class="illustration-psd">墨</span><div class="illustration-lines"><i></i><i></i><i></i></div></div>
+                <span class="illustration-mini"><svg class="icon"><use href="#i-layers"/></svg></span>
+              </div>
+              <h1>欢迎来到墨境 Studio</h1>
+              <p>将 PSD、SVG 或图片拖到这里，浏览作品与处理图片</p>
+              <div class="empty-actions"><button class="button button-primary" type="button" data-action="open"><svg class="icon"><use href="#i-open"/></svg>选择作品或图片</button><button class="empty-example" type="button" data-action="demo">先看看示例 <span aria-hidden="true">↗</span></button></div>
+              <div class="empty-assurances"><span><svg class="icon"><use href="#i-check"/></svg>文件在本机处理</span><span class="assurance-separator"></span><span>支持多文件标签</span></div>
+            </div>
+            <div class="empty-bottom-note"><span>图层结构</span><i>·</i><span>独立预览</span><i>·</i><span>PNG / JPG 导出</span></div>
+          </div>
+          <div id="loading-overlay" class="loading-overlay" hidden>
+            <div class="loading-card" role="status" aria-live="polite" data-phase="read">
+              <div class="loading-heading"><span class="loading-document-icon" aria-hidden="true"><svg class="icon"><use href="#i-file"/></svg></span><div><span class="loading-kicker">打开文档</span><strong id="loading-text">正在读取文件…</strong></div></div>
+              <p id="loading-filename" class="loading-filename">准备打开作品</p>
+              <div class="loading-track" role="progressbar" aria-label="文档加载中"><span></span></div>
+              <ol class="loading-steps" aria-label="文档加载步骤"><li id="loading-step-read" data-state="active"><span aria-hidden="true">1</span>读取文件</li><li id="loading-step-render" data-state="waiting"><span aria-hidden="true">2</span>生成预览</li></ol>
+              <div class="loading-bottom"><p id="loading-detail">大画布可能需要一些时间</p><button id="cancel-btn" class="button button-secondary" type="button">取消</button></div>
+            </div>
+          </div>
+          <div class="drop-indicator" aria-hidden="true"><svg class="icon"><use href="#i-open"/></svg><strong>松开以打开作品或图片</strong><span>支持多个文件 · 在本机读取</span></div>
+          <div class="viewport-hint" aria-hidden="true">点击图形选层 <span>·</span> <kbd>Alt</kbd> 切换重叠层 <span>·</span> <kbd>空格</kbd> 平移</div>
+        </div>
+      </section>
+
+      <aside class="sidebar" aria-label="图层、属性与图片调整">
+        <div class="sidebar-tabs" role="tablist" aria-label="工作面板">
+          <button id="sidebar-layers-tab" class="sidebar-tab" type="button" role="tab" aria-selected="true" aria-controls="sidebar-layers-panel" tabindex="0"><svg class="icon"><use href="#i-layers"/></svg>图层</button>
+          <button id="sidebar-adjust-tab" class="sidebar-tab" type="button" role="tab" aria-selected="false" aria-controls="sidebar-adjust-panel" tabindex="-1" hidden><svg class="icon"><use href="#i-adjustment"/></svg>调整</button>
+        </div>
+        <div id="sidebar-layers-panel" class="sidebar-panel sidebar-layers-panel" role="tabpanel" aria-labelledby="sidebar-layers-tab">
+          <section class="layers-panel" aria-label="图层面板">
+          <div class="panel-heading"><div class="panel-title"><svg class="icon"><use href="#i-layers"/></svg><h2>图层</h2><span id="layer-count" class="count-badge">0</span></div><div class="panel-actions"><button id="expand-all" class="icon-button" type="button" title="展开全部分组" aria-label="展开全部分组"><svg class="icon"><use href="#i-expand"/></svg></button><button id="collapse-all" class="icon-button" type="button" title="折叠全部分组" aria-label="折叠全部分组"><svg class="icon"><use href="#i-collapse"/></svg></button></div></div>
+          <div class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="layer-search" type="search" placeholder="搜索图层名称…" aria-label="搜索图层名称" autocomplete="off" spellcheck="false"><kbd>⌕</kbd></div>
+          <div class="layers-column-labels"><span>可见</span><span>名称</span><span>类型</span></div>
+          <div id="layer-list" role="tree" aria-label="文档图层树" tabindex="0"><div class="layer-list-empty"><svg class="icon"><use href="#i-layers"/></svg><span>暂无图层</span><small>打开作品后显示图层结构</small></div></div>
+          <div class="layers-tip"><svg class="icon"><use href="#i-eye"/></svg><span>点击眼睛切换显隐 · 点击图层查看属性</span></div>
+          </section>
+          <details class="inspector-panel" open>
+          <summary><span>属性</span><svg class="icon"><use href="#i-chevron-down"/></svg></summary>
+          <div id="inspector" class="inspector-content"><div class="inspector-empty"><svg class="icon"><use href="#i-image"/></svg><p>选择图层以查看详细信息</p><span>尺寸、位置、透明度及文字内容</span></div></div>
+          </details>
+        </div>
+        <section id="sidebar-adjust-panel" class="sidebar-panel sidebar-adjust-panel" role="tabpanel" aria-labelledby="sidebar-adjust-tab" hidden>
+          <div class="image-adjust-body">
+            <div class="image-adjust-heading"><div><h2>色彩与滤镜</h2><p>为当前图片找到合适的氛围</p></div><span class="image-adjust-badge">IMAGE</span></div>
+            <section class="image-adjust-section" aria-label="风格预设">
+              <div class="image-adjust-section-title"><h3>风格预设</h3><span>当前图片预览</span></div>
+              <div id="filter-presets" class="filter-presets" aria-label="图片滤镜预设"></div>
+            </section>
+            <section class="image-adjust-section image-adjust-parameters" aria-label="精细调整">
+              <div class="image-adjust-section-title"><h3>精细调整</h3><span>实时生效</span></div>
+              <div class="image-adjust-sliders">
+                <div class="image-adjust-slider is-centered"><div class="image-adjust-slider-label"><label for="adjust-brightness">亮度</label><output id="adjust-brightness-value" for="adjust-brightness">0</output></div><div class="image-adjust-slider-control"><input id="adjust-brightness" type="range" min="-100" max="100" step="1" value="0"></div></div>
+                <div class="image-adjust-slider is-centered"><div class="image-adjust-slider-label"><label for="adjust-contrast">对比度</label><output id="adjust-contrast-value" for="adjust-contrast">0</output></div><div class="image-adjust-slider-control"><input id="adjust-contrast" type="range" min="-100" max="100" step="1" value="0"></div></div>
+                <div class="image-adjust-slider is-centered"><div class="image-adjust-slider-label"><label for="adjust-saturation">饱和度</label><output id="adjust-saturation-value" for="adjust-saturation">0</output></div><div class="image-adjust-slider-control"><input id="adjust-saturation" type="range" min="-100" max="100" step="1" value="0"></div></div>
+                <div class="image-adjust-slider is-centered"><div class="image-adjust-slider-label"><label for="adjust-temperature">色温</label><output id="adjust-temperature-value" for="adjust-temperature">0</output></div><div class="image-adjust-slider-control"><input id="adjust-temperature" type="range" min="-100" max="100" step="1" value="0"></div></div>
+                <div class="image-adjust-slider"><div class="image-adjust-slider-label"><label for="adjust-sharpness">锐化</label><output id="adjust-sharpness-value" for="adjust-sharpness">0</output></div><div class="image-adjust-slider-control"><input id="adjust-sharpness" type="range" min="0" max="100" step="1" value="0"></div></div>
+                <div class="image-adjust-slider image-adjust-strength"><div class="image-adjust-slider-label"><label for="adjust-strength">滤镜强度</label><output id="adjust-strength-value" for="adjust-strength">100%</output></div><div class="image-adjust-slider-control"><input id="adjust-strength" type="range" min="0" max="100" step="1" value="100"></div></div>
+              </div>
+            </section>
+          </div>
+          <div class="image-adjust-footer">
+            <div class="image-adjust-actions"><button id="filter-compare" class="button filter-compare-button" type="button" aria-pressed="false" title="按住以临时查看原图"><svg class="icon"><use href="#i-eye"/></svg>按住查看原图</button><button id="filter-reset" class="button button-secondary filter-reset-button" type="button" title="恢复所有图片调整">恢复默认</button></div>
+            <p id="filter-status" class="filter-status" role="status" aria-live="polite" aria-atomic="true">调整将在当前图片上实时预览</p>
+            <p class="image-adjust-note"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>源图保留 · 所有调整均在本机处理</p>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="status-bar">
+      <div class="status-main"><span class="status-light" aria-hidden="true"></span><span id="status-text">就绪</span></div>
+      <span class="status-local">墨境 Studio · 文件在本机处理</span>
+      <div class="status-right"><span id="status-dimensions">— × — px</span><span class="status-divider"></span><div class="zoom-controls"><button id="zoom-out" class="icon-button" type="button" title="缩小 · −" aria-label="缩小"><svg class="icon"><use href="#i-minus"/></svg></button><span id="zoom-label">100%</span><button id="zoom-in" class="icon-button" type="button" title="放大 · +" aria-label="放大"><svg class="icon"><use href="#i-plus"/></svg></button></div></div>
+    </footer>
+  </div>
+
+  <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title">
+    <div class="dialog-heading export-heading">
+      <div><span class="dialog-eyebrow">EXPORT IMAGE</span><h2 id="export-title">导出图片</h2></div>
+      <button id="export-close" class="icon-button" type="button" aria-label="关闭导出设置" title="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="export-body">
+      <section class="export-preview-panel" aria-label="导出预览">
+        <div class="export-preview-label"><span><svg class="icon"><use href="#i-image"/></svg>导出预览</span><span>随设置实时更新</span></div>
+        <div class="export-preview-stage">
+          <canvas id="export-preview-canvas" width="1" height="1" aria-label="含水印的导出预览"></canvas>
+          <p id="export-preview-status" class="export-preview-status" role="status" aria-live="polite">正在生成预览…</p>
+        </div>
+        <p id="export-details" class="export-details">当前画面 · 原始尺寸</p>
+      </section>
+      <form id="export-form" class="export-settings">
+        <section class="export-section" aria-labelledby="export-image-settings-title">
+          <h3 id="export-image-settings-title">图片设置</h3>
+          <div class="export-two-columns">
+            <div class="export-field"><label for="export-format">格式</label><select id="export-format"><option value="png">PNG · 保留透明</option><option value="jpeg">JPG · 通用图片</option></select></div>
+            <div class="export-field"><label for="export-scope">范围</label><select id="export-scope"><option value="current">当前画面</option><option value="layer">选中图层</option></select></div>
+          </div>
+          <div class="export-field"><label for="export-size">导出尺寸</label><select id="export-size"><option value="0">原始尺寸</option><option value="4096">长边 4096 px</option><option value="2048">长边 2048 px</option><option value="1200">长边 1200 px</option></select></div>
+          <div id="export-quality-row" class="export-slider" hidden><div><label for="export-quality">JPG 画质</label><output id="export-quality-value" for="export-quality">92%</output></div><input id="export-quality" type="range" min="60" max="100" step="1" value="92"></div>
+          <div id="export-background-row" class="export-color-row" hidden><label for="export-background">JPG 背景</label><input id="export-background" type="color" value="#ffffff" aria-label="JPG 背景颜色"><span>透明区域填充此颜色</span></div>
+        </section>
+        <section class="export-section watermark-section" aria-labelledby="watermark-heading">
+          <div class="watermark-heading"><div><h3 id="watermark-heading">文字水印</h3><p>为作品添加署名或样稿标记</p></div><label class="watermark-toggle"><input id="watermark-enabled" type="checkbox"><span>添加水印</span></label></div>
+          <fieldset id="watermark-settings" disabled>
+            <legend class="visually-hidden">水印设置</legend>
+            <div class="export-field"><label for="watermark-text">水印文字</label><input id="watermark-text" type="text" maxlength="120" value="仅供预览" placeholder="输入署名或水印文字" autocomplete="off" spellcheck="false"></div>
+            <div class="export-field"><label for="watermark-position">位置</label><select id="watermark-position"><option value="bottom-right">右下角</option><option value="bottom-left">左下角</option><option value="top-right">右上角</option><option value="top-left">左上角</option><option value="center">居中</option><option value="tile">斜向平铺</option></select></div>
+            <div class="export-slider"><div><label for="watermark-opacity">不透明度</label><output id="watermark-opacity-value" for="watermark-opacity">25%</output></div><input id="watermark-opacity" type="range" min="5" max="100" step="1" value="25"></div>
+            <div class="export-slider"><div><label for="watermark-size">文字大小 <span>· 图像短边</span></label><output id="watermark-size-value" for="watermark-size">5%</output></div><input id="watermark-size" type="range" min="1" max="15" step="1" value="5"></div>
+            <div class="export-color-row"><label for="watermark-color">文字颜色</label><input id="watermark-color" type="color" value="#ffffff" aria-label="水印文字颜色"><span>浅色画面也有轻微描边</span></div>
+          </fieldset>
+        </section>
+        <p id="export-error" class="export-error" role="alert"></p>
+      </form>
+    </div>
+    <div class="dialog-footer export-footer">
+      <span><svg class="icon"><use href="#i-check"/></svg>水印仅用于导出，源文件保持原样</span>
+      <div class="export-actions"><button id="export-cancel" class="button button-secondary" type="button">取消</button><button id="export-download" class="button button-primary" type="submit" form="export-form"><svg class="icon"><use href="#i-download"/></svg>导出图片</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-heading"><div><span class="dialog-eyebrow">MOJING STUDIO</span><h2 id="help-title">使用帮助</h2></div><button id="help-close" class="icon-button" type="button" aria-label="关闭帮助"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <div class="dialog-body">
+      <p class="dialog-intro">墨境 Studio，本地 PSD / SVG / 图片工作台。浏览源稿图层、调整普通图片，并导出 PNG / JPG。文件在本机处理，导入的源文件保留原样。</p>
+      <div class="help-section"><h3>打开与切换文件</h3><p>支持 PSD / PSB、SVG 和常规图片。打开时可以多选，也可以一次拖入多个文件；点击顶部标签切换文档，点击 × 关闭。标签较多时可横向滚动查看。</p></div>
+      <div class="help-section"><h3>图层与画布</h3><p>使用选择工具点击画布中的图形，右侧自动展开并选中对应图层；透明区域会穿透选择。按住 Alt 重复点击，可切换重叠图层。点击眼睛切换显隐，或使用搜索查找图层。</p><p>可切换原始合成、图层合成与当前图层预览。拖动画布或按住空格平移，使用缩放按钮查看细节；“画布”可设置工作区背景与透明网格。没有独立画面的节点保留名称与属性。</p></div>
+      <div class="help-section"><h3>七款图片滤镜</h3><p>普通图片打开后，右侧自动进入“调整”。提供自然增强、明亮通透、清晰质感、柔和暖调、冷色清爽、经典黑白和人像柔和七款预设。可继续调节亮度、对比度、饱和度、色温、锐化与滤镜强度。</p><p>按住“查看原图”临时对比，点击“恢复默认”清除调整。滤镜仅用于普通图片，PSD 与 SVG 使用图层功能；调整不会改写导入的源图。</p></div>
+      <div class="help-section"><h3>PNG / JPG 与文字水印</h3><p>点击“导出图片”，选择当前画面或选中图层，并设置输出尺寸。PNG 保留透明区域，JPG 可设置背景色。可添加文字水印，调整文字、位置、大小、颜色与不透明度，也支持斜向平铺。</p></div>
+      <div class="help-section"><h3>画布快捷操作</h3><div class="shortcut-grid"><span><kbd>V</kbd> 选择图层</span><span><kbd>H</kbd> 平移工具</span><span><kbd>+</kbd><kbd>−</kbd> 放大 / 缩小</span><span><kbd>0</kbd> 适应窗口</span><span><kbd>1</kbd> 实际大小</span><span><kbd>空格</kbd> 按住拖动平移</span></div></div>
+      <div class="help-callout"><svg class="icon"><use href="#i-help"/></svg><p>PSD 使用文件内的像素缓存预览。复杂特效、调整图层与特殊色彩模式可能与 Photoshop 不同；无像素缓存的图层仍可查看结构与属性。</p></div>
+    </div>
+    <div class="dialog-footer"><span>墨境 Studio · PSD / SVG / 图片工作台</span><form method="dialog"><button class="button button-primary" type="submit">知道了</button></form></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <!--WORKER-->
+  <!--APP-->
+</body>
+</html>

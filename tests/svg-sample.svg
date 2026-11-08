@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1000" height="750" viewBox="0 0 1000 750" aria-label="VECTOR FIELD · SVG 示例">
+  <defs>
+    <radialGradient id="orb-gradient" cx="30%" cy="24%" r="77%"><stop offset="0" stop-color="#ffe2af"/><stop offset=".47" stop-color="#f79b5a"/><stop offset="1" stop-color="#dc683e"/></radialGradient>
+    <linearGradient id="fade-gradient"><stop stop-color="white"/><stop offset="1" stop-color="black"/></linearGradient>
+    <mask id="fade-mask" maskUnits="userSpaceOnUse" x="600" y="575" width="280" height="16"><rect x="600" y="575" width="280" height="16" fill="url(#fade-gradient)"/></mask>
+    <clipPath id="image-clip"><circle cx="835" cy="617" r="34"/></clipPath>
+    <symbol id="cross-symbol" viewBox="0 0 30 30"><path d="M15 0v30M0 15h30" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+    <style>.copy{font-family:system-ui,-apple-system,"PingFang SC",sans-serif;fill:#24372f}.small{font-size:12px;letter-spacing:1px}.hidden-variant{display:none}</style>
+  </defs>
+  <g id="paper-group" aria-label="01 · 纸张与细线">
+    <rect id="paper" width="1000" height="750" fill="#f2eee5" aria-label="暖白纸张"/>
+    <path id="grid-lines" d="M80 660H880M80 118H420" fill="none" stroke="#b7c1b6" stroke-width="1" aria-label="版式细线"/>
+  </g>
+  <g id="forms-group" aria-label="02 · 几何与渐变">
+    <rect id="blue-panel" x="600" y="110" width="280" height="450" fill="#4977f0" aria-label="蓝色矩形"/>
+    <circle id="orange-orb" cx="660" cy="340" r="155" fill="url(#orb-gradient)" aria-label="橙色渐变球体"/>
+    <ellipse id="white-orbit" cx="693" cy="343" rx="90" ry="184" transform="rotate(35 693 343)" fill="none" stroke="#fff9eb" stroke-width="2" aria-label="旋转白色轨道"/>
+    <path id="green-ring" d="M895 470a80 80 0 1 1-160 0a80 80 0 1 1 160 0M857 470a42 42 0 1 0-84 0a42 42 0 1 0 84 0" fill="#295c4e" fill-rule="evenodd" aria-label="森林绿镂空圆环"/>
+    <use id="cross-instance" href="#cross-symbol" x="861" y="79" width="30" height="30" color="#24372f" aria-label="符号实例·十字"/>
+    <rect id="masked-accent" x="600" y="575" width="280" height="16" fill="#ee8750" mask="url(#fade-mask)" aria-label="蒙版渐隐色条"/>
+    <image id="embedded-image" x="801" y="583" width="68" height="68" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAALElEQVR4nGPwLP/wHxlrxvihYELyDMPAAFI1oMsPBwMGPhYG3oCBj4UBNwAACN5An7987GMAAAAASUVORK5CYII=" clip-path="url(#image-clip)" aria-label="内嵌棋盘图片"/>
+    <text id="figure-label" class="copy small" x="600" y="616">FIG. 02 / VECTOR STUDY</text>
+  </g>
+  <g id="type-group" aria-label="03 · 标题与信息" class="copy">
+    <text id="eyebrow" class="small" x="80" y="91">LOCAL EXPLORATION / VOL. 02</text>
+    <text id="main-title" x="74" y="217" font-family="Arial,Helvetica,sans-serif" font-size="88" font-weight="700" letter-spacing="-5"><tspan x="74" dy="0">VECTOR</tspan><tspan x="74" dy="89">FIELD</tspan></text>
+    <text id="subtitle" x="80" y="390" font-size="23">看见路径，展开每一层。</text>
+    <text id="body-copy" x="80" y="439" font-size="16" fill="#6a776d"><tspan x="80">Shapes, gradients and quiet details.</tspan><tspan x="80" dy="25">An open canvas for local ideas.</tspan></text>
+    <text id="svg-badge" class="small" x="80" y="572">SVG / RESOLUTION INDEPENDENT</text>
+    <text id="footer-label" class="small" x="80" y="691" font-size="10">LAYERDESK · LOCAL VECTOR EXPLORER</text>
+    <text id="page-number" class="small" x="822" y="691">02 — 03</text>
+  </g>
+  <g id="hidden-group" aria-label="04 · 隐藏的备选设计" class="hidden-variant">
+    <rect id="hidden-blue" x="80" y="500" width="350" height="80" fill="#c7dbed" aria-label="隐藏备选色块"/>
+    <text id="hidden-text" x="100" y="546" class="copy" font-size="22">另一种可能。</text>
+  </g>
+</svg>

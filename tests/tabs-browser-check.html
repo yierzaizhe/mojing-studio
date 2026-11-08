@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LayerDesk · 多文档标签验收</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#17191d;color:#dce1e8;font:14px/1.6 system-ui,sans-serif}main{max-width:1440px;margin:auto;padding:24px}h1{font-size:24px;margin:0 0 8px}p{color:#a5afbd;margin:8px 0 14px}button{padding:8px 14px;background:#2b3342;color:#e5ecf8;border:1px solid #46536a;border-radius:4px;cursor:pointer}button:disabled{opacity:.5}a{color:#8dbbff}#summary{padding:12px 14px;background:#252a34;border:1px solid #3d485a;margin:16px 0}.pass{color:#80ddb0}.fail{color:#ff8b8b}.running{color:#8dbbff}li{padding:3px 0}iframe{display:block;width:100%;height:780px;border:1px solid #535a66;background:#292929}pre{font:12px/1.5 ui-monospace,monospace;padding:16px;background:#101216;white-space:pre-wrap;overflow-wrap:anywhere}.note{font-size:12px}
+</style>
+<main>
+<h1>多文档标签验收</h1>
+<p>通过真实文件输入与拖放一次导入 PSD、SVG、PNG。解析、渲染和界面事件均直接使用交付 HTML，不模拟文档或渲染结果。</p>
+<button id="run">重新运行</button> <a href="../index.html">返回工具</a>
+<div id="summary">准备验收…</div><ol id="checks"></ol>
+<p class="note">最后保留三个真实文件标签与矢量示例画面，供检查工作区和标签栏。</p>
+<iframe id="preview" title="LayerDesk 真实多文档预览"></iframe>
+<pre id="result">{}</pre>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id),records=[];
+  const assert=(value,message)=>{if(!value)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  let busy=false,win,doc,files,identities,expectedViews,stageDrawSequence=0,lastStageDraw=null;
+  const el=id=>doc.getElementById(id),canvas=()=>el('stage-canvas'),viewport=()=>el('canvas-viewport');
+  const tabs=()=>[...doc.querySelectorAll('#document-tabs .document-tab-item[data-document-id]')];
+  const tab=id=>tabs().find(node=>node.dataset.documentId===id);
+  const active=()=>doc.querySelector('#document-tabs .document-tab-item.active');
+  const title=node=>node?.querySelector('[role="tab"]')?.textContent.trim()||'';
+  const tabNamed=name=>tabs().find(node=>title(node).includes(name));
+  const idle=()=>viewport().getAttribute('aria-busy')==='false'&&el('loading-overlay').hidden;
+  function update(){const r={done:!busy,passed:records.filter(r=>r.pass).length,failed:records.filter(r=>!r.pass).length,checks:records};window.__tabsBrowserResult=r;$('result').textContent=JSON.stringify(r,null,2);$('summary').textContent=`${busy?'运行中':'验收结束'} · ${r.passed} 项通过 · ${r.failed} 项失败`;$('summary').className=r.failed?'fail':busy?'running':'pass';$('run').disabled=busy;}
+  async function check(name,fn){const li=document.createElement('li'),start=performance.now();li.className='running';li.textContent=`运行 · ${name}`;$('checks').append(li);try{const detail=await fn();records.push({name,pass:true,ms:Math.round(performance.now()-start),...(detail===undefined?{}:{detail})});li.className='pass';li.textContent=`PASS · ${name}`;}catch(error){records.push({name,pass:false,ms:Math.round(performance.now()-start),error:error.message});li.className='fail';li.textContent=`FAIL · ${name} · ${error.message}`;}update();}
+  async function until(fn,message,timeout=25000){const start=performance.now();while(performance.now()-start<timeout){const value=fn();if(value)return value;await sleep(30);}throw new Error(`等待超时：${message}`);}
+  function settle(){return new Promise(resolve=>{const fallback=setTimeout(resolve,160);win.requestAnimationFrame(()=>win.requestAnimationFrame(()=>{clearTimeout(fallback);resolve();}));});}
+  const pendingTabs=()=>tabs().filter(node=>node.matches('.queued,.loading'));
+  async function allLoaded(count){await until(()=>tabs().length===count,`${count} 个标签出现`);await until(()=>pendingTabs().length===0,`全部 ${count} 个文档完成队列`);await settle();}
+  async function committed({documentId=active()?.dataset.documentId,minDraw=0}={}){
+    const ready=()=>active()?.dataset.documentId===documentId&&!canvas().hidden&&canvas().width>1&&idle()&&lastStageDraw?.documentId===documentId&&lastStageDraw.sequence>=minDraw;
+    await until(ready,`当前文档 ${documentId} 的实际画布提交`);await settle();await until(ready,`当前文档 ${documentId} 提交后仍保持激活和 idle`);
+  }
+  function importFiles(list){const transfer=new win.DataTransfer();list.forEach(file=>transfer.items.add(file));el('file-input').files=transfer.files;el('file-input').dispatchEvent(new win.Event('change',{bubbles:true}));}
+  function dropFiles(list){const transfer=new win.DataTransfer();list.forEach(file=>transfer.items.add(file));doc.dispatchEvent(new win.DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));}
+  async function activate(id){const wrapper=tab(id);assert(wrapper,`缺少文档标签 ${id}`);const control=wrapper.querySelector('[role="tab"]');assert(control,'文档缺少 role=tab 控件');const minDraw=stageDrawSequence+(active()?.dataset.documentId===id?0:1);control.click();await until(()=>active()?.dataset.documentId===id,'标签激活');await committed({documentId:id,minDraw});assert(tabs().filter(node=>node.classList.contains('active')).length===1,'同时出现多个当前标签');return tab(id);}
+  async function close(id){const wrapper=tab(id);assert(wrapper,`无法关闭不存在的标签 ${id}`);const control=wrapper.querySelector('.document-tab-close');assert(control,'文档标签缺少关闭按钮');control.click();await until(()=>!tab(id),'关闭标签移除');await settle();}
+  async function closeAll(){for(const id of tabs().map(node=>node.dataset.documentId))if(tab(id))await close(id);await until(()=>tabs().length===0&&canvas().hidden&&!el('empty-state').hidden,'全关空状态');}
+  function change(id,value){const control=el(id);assert(control,'缺少 '+id);control.value=value;control.dispatchEvent(new win.Event('change',{bubbles:true}));}
+  function search(value){el('layer-search').value=value;el('layer-search').dispatchEvent(new win.Event('input',{bubbles:true}));}
+  function selected(){return doc.querySelector('#layer-list .layer-row.selected');}
+  function view(){return{mode:el('mode-select').value,search:el('layer-search').value,zoom:el('zoom-label').textContent,selected:selected()?.dataset.id||null,eye:selected()?.querySelector('.layer-eye')?.getAttribute('aria-pressed'),title:title(active()),width:canvas().width,height:canvas().height};}
+  function pixels(){const c=canvas();return{width:c.width,height:c.height,data:c.getContext('2d').getImageData(0,0,c.width,c.height).data};}
+  function samePixels(before,message){const after=pixels();assert(after.width===before.width&&after.height===before.height,`${message}：尺寸变化`);for(let i=0;i<before.data.length;i++)if(before.data[i]!==after.data[i])throw new Error(`${message}：第 ${i} 通道变化`);}
+  function point(u,v){const c=canvas();return [...c.getContext('2d').getImageData(Math.min(c.width-1,Math.floor(u*c.width)),Math.min(c.height-1,Math.floor(v*c.height)),1,1).data];}
+  function watchStageDraws(){
+    stageDrawSequence=0;lastStageDraw=null;
+    const context=canvas().getContext('2d'),draw=context.drawImage;
+    context.drawImage=function(...args){
+      const result=Reflect.apply(draw,this,args);
+      lastStageDraw={sequence:++stageDrawSequence,documentId:active()?.dataset.documentId,title:title(active()),mode:el('mode-select').value,width:canvas().width,height:canvas().height,sourceWidth:args[0]?.width,sourceHeight:args[0]?.height};
+      return result;
+    };
+  }
+  async function nativeFiles(){
+    const raw=win.atob(el('demo-psd-data').textContent.trim()),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    const psd=new win.File([bytes],'标签验收 · 设计.psd',{type:'image/vnd.adobe.photoshop'});
+    const svgResponse=await fetch('svg-sample.svg');assert(svgResponse.ok,'缺少真实 SVG 示例');
+    const svg=new win.File([await svgResponse.blob()],'标签验收 · 矢量.svg',{type:'image/svg+xml'});
+    const source=document.createElement('canvas');source.width=240;source.height=180;const context=source.getContext('2d');context.fillStyle='#2a83bd';context.fillRect(48,36,144,108);context.fillStyle='rgba(244,154,61,.5)';context.fillRect(16,128,40,32);
+    const blob=await new Promise((resolve,reject)=>source.toBlob(b=>b?resolve(b):reject(new Error('PNG 创建失败')),'image/png'));
+    const png=new win.File([blob],'标签验收 · 透明.png',{type:'image/png'});
+    return {psd,svg,png};
+  }
+  async function initialize(){
+    const response=await fetch('../index.html',{cache:'no-store'});assert(response.ok,'请先构建交付 HTML');const source=await response.text();
+    assert(source.includes('id="document-tabs"'),'交付 HTML 尚无多文档标签栏');
+    const iframe=$('preview'),loaded=new Promise(resolve=>iframe.addEventListener('load',resolve,{once:true}));iframe.srcdoc=source;await loaded;win=iframe.contentWindow;doc=iframe.contentDocument;
+    await until(()=>el('file-input')?.onchange&&el('open-btn')?.onclick,'应用真实事件绑定');watchStageDraws();files=await nativeFiles();identities={};expectedViews={};
+  }
+  async function rememberDocuments(){for(const [kind,file]of Object.entries(files)){const wrapper=tabNamed(file.name);assert(wrapper,`没有 ${file.name}`);identities[kind]=wrapper.dataset.documentId;}}
+  async function configure(id,options){
+    await activate(id);search(options.search);await settle();const row=doc.querySelector('#layer-list .layer-row:not(.is-group)');assert(row,`${options.search} 未找到可选叶子`);row.querySelector('.layer-name').click();await settle();
+    if(options.hide){doc.querySelector('#layer-list .layer-row.selected .layer-eye').click();await committed();}
+    change('mode-select',options.mode);await committed();el('actual-btn').click();for(let i=0;i<Math.abs(options.zoomSteps);i++)el(options.zoomSteps>0?'zoom-in':'zoom-out').click();await settle();return view();
+  }
+  async function run(){
+    if(busy)return;busy=true;records.length=0;$('checks').replaceChildren();update();
+    try{
+      await check('多文件输入与真实多文档界面就绪',async()=>{await initialize();assert(el('file-input').multiple,'文件输入尚未启用 multiple');assert(tabs().length===0,'初始状态出现了残留标签');return{multiple:el('file-input').multiple};});
+      if(!doc||!files)return;
+      await check('一次选择真实 PSD、SVG、PNG，建立三个独立标签',async()=>{
+        importFiles([files.psd,files.svg,files.png]);await allLoaded(3);await rememberDocuments();assert(new Set(Object.values(identities)).size===3,'文档 ID 重复');assert(!tabs().some(node=>node.classList.contains('failed')),'有效批次出现失败文档');
+        importFiles([files.png]);await until(()=>tabs().length===3&&active()?.dataset.documentId===identities.png,'重复打开已有文件只聚焦原标签');await committed();
+        return{tabs:tabs().map(node=>({id:node.dataset.documentId,name:title(node)}))};
+      });
+      await check('每个标签显示对应文件名、元素树与真实画布格式',async()=>{
+        await activate(identities.psd);assert(el('mode-select').querySelector('[value="original"]').textContent.includes('合成'),'PSD 标签未恢复 PSD 模式');assert(el('layer-count').textContent==='22','PSD 图层树错误');const psdBlue=point(.66,.1733);assert(psdBlue[2]>170&&psdBlue[2]>psdBlue[0],'PSD 画布未显示真实设计');
+        await activate(identities.svg);assert(el('mode-select').querySelector('[value="original"]').textContent.includes('SVG'),'SVG 标签仍显示其他文件模式');assert(Number(el('layer-count').textContent)>=20,'SVG 元素树缺失');const svgBlue=point(.7,.1867);assert(svgBlue[2]>170&&svgBlue[2]>svgBlue[0],'SVG 标签画布不是矢量示例');
+        await activate(identities.png);assert(el('mode-select').querySelector('[value="original"]').textContent==='原图'&&el('mode-select').querySelector('[value="composite"]').textContent==='调整后','PNG 标签没有原图与调整后模式');assert(el('layer-count').textContent==='1','PNG 未恢复单图层');const corner=point(0,0),center=point(.5,.5);
+        const pngDiagnostic={activeDocumentId:active()?.dataset.documentId,title:title(active()),width:canvas().width,height:canvas().height,mode:el('mode-select').value,dimensions:el('status-dimensions').textContent,ariaBusy:viewport().getAttribute('aria-busy'),corner,center,stageDraw:lastStageDraw};
+        assert(canvas().width===240&&canvas().height===180,'PNG 画布尺寸错误：'+JSON.stringify(pngDiagnostic));
+        assert(corner[3]===0&&center[3]===255&&center[2]>100,'PNG 透明度或实际像素错误：'+JSON.stringify(pngDiagnostic));
+        return{psdBlue,svgBlue,pngCorner:corner,pngCenter:center,pngDiagnostic};
+      });
+      await check('三个文档分别记录缩放、模式、筛选、选中图层与显隐',async()=>{
+        expectedViews.psd=await configure(identities.psd,{search:'主标题',mode:'composite',zoomSteps:2,hide:true});
+        expectedViews.svg=await configure(identities.svg,{search:'蓝色',mode:'layer',zoomSteps:-1});
+        expectedViews.png=await configure(identities.png,{search:'透明',mode:'original',zoomSteps:1});
+        assert(expectedViews.psd.eye==='false','PSD 隐藏状态没有改变');assert(new Set(Object.values(expectedViews).map(v=>v.zoom)).size===3,'测试没有设置三个不同缩放值');return expectedViews;
+      });
+      await check('往返切换标签恢复每份文档自己的查看状态',async()=>{
+        const restored={};for(const kind of ['psd','svg','png','svg','psd']){await activate(identities[kind]);const actual=view(),expected=expectedViews[kind];for(const key of ['mode','search','zoom','selected','eye'])assert(actual[key]===expected[key],`${kind} 的 ${key} 未恢复：${actual[key]} / ${expected[key]}`);restored[kind]=actual;}return restored;
+      });
+      await check('重绘中快速切标签，返回时恢复最新显隐且导出对应当前文档',async()=>{
+        await activate(identities.png);change('mode-select','composite');
+        const eye=selected()?.querySelector('.layer-eye');assert(eye,'PNG 缺少可切换的选中图层');eye.click();
+        // Switch in the same browser event turn, before the genuine render promise resolves.
+        await activate(identities.svg);await sleep(140);assert(active()?.dataset.documentId===identities.svg,'PNG 的迟到结果切换了当前文档');assert(el('mode-select').value===expectedViews.svg.mode,'重绘中切换丢失 SVG 模式');
+        const svgCenter=point(.5,.5);assert(svgCenter[3]===255&&svgCenter[2]>svgCenter[0],'迟到 PNG 帧覆盖了 SVG');
+        await activate(identities.png);assert(selected()?.querySelector('.layer-eye').getAttribute('aria-pressed')==='false','返回 PNG 时最新隐藏状态丢失');assert(point(.5,.5)[3]===0,'返回 PNG 后仍显示隐藏前的旧帧');
+        el('export-btn').click();await until(()=>el('export-dialog').open,'当前 PNG 导出窗口');change('export-format','png');change('export-scope','current');
+        if(el('watermark-enabled').checked){el('watermark-enabled').checked=false;el('watermark-enabled').dispatchEvent(new win.Event('change',{bubbles:true}));}
+        await until(()=>!el('export-preview-canvas').hidden&&el('export-preview-canvas').width===240&&el('export-preview-canvas').height===180&&!/正在/.test(el('export-preview-status').textContent),'当前 PNG 的真实导出预览');
+        const output=el('export-preview-canvas'),exportAlpha=output.getContext('2d').getImageData(120,90,1,1).data[3];assert(exportAlpha===0,'导出预览没有采用当前 PNG 最新显隐状态');
+        el('export-cancel').click();await settle();selected().querySelector('.layer-eye').click();await committed();assert(point(.5,.5)[3]===255,'PNG 显示恢复失败');
+        return{svgCenter,hiddenPngAlpha:0,exportPreview:{width:output.width,height:output.height,alpha:exportAlpha}};
+      });
+      await check('关闭非当前标签不改变当前文档及画布像素',async()=>{
+        await activate(identities.png);const before=pixels(),activeId=active().dataset.documentId;await close(identities.psd);assert(tabs().length===2,'非当前标签没有关闭');assert(active()?.dataset.documentId===activeId,'关闭非当前文档切换了当前文档');samePixels(before,'关闭非当前文档改变 PNG');return{active:title(active()),remaining:tabs().length};
+      });
+      await check('关闭当前标签自动切到仍打开的邻近文档',async()=>{
+        await close(identities.png);await committed();assert(tabs().length===1&&active()?.dataset.documentId===identities.svg,'关闭当前文档后未选择剩余邻居');assert(el('mode-select').value===expectedViews.svg.mode&&el('layer-search').value===expectedViews.svg.search,'邻居文档查看状态丢失');return{active:title(active())};
+      });
+      await check('关闭全部标签后清除画布、图层和 busy 状态',async()=>{
+        await closeAll();assert(canvas().hidden&&el('canvas-paper').hidden&&!el('empty-state').hidden,'全关后没有空状态');assert(!doc.querySelector('#layer-list .layer-row'),'全关后残留图层树');assert(idle(),'全关后保留 busy');return{tabs:tabs().length,emptyVisible:!el('empty-state').hidden};
+      });
+      let recoveryIds;
+      await check('批次中的损坏 PSD 不妨碍后续 PNG 和 SVG 加载',async()=>{
+        const bad=new win.File(['not a real Photoshop source'],'损坏样本.psd',{type:'image/vnd.adobe.photoshop'}),png=new win.File([files.png],'恢复透明.png',{type:'image/png'}),svg=new win.File([files.svg],'恢复矢量.svg',{type:'image/svg+xml'});
+        importFiles([bad,png,svg]);await allLoaded(3);const failed=tabNamed(bad.name),pngTab=tabNamed(png.name),svgTab=tabNamed(svg.name);assert(failed?.classList.contains('failed'),'损坏文件没有明确失败标签');assert(pngTab&&!pngTab.matches('.queued,.loading,.failed')&&svgTab&&!svgTab.matches('.queued,.loading,.failed'),'后续有效文档未完成队列');recoveryIds={bad:failed.dataset.documentId,png:pngTab.dataset.documentId,svg:svgTab.dataset.documentId};
+        await activate(recoveryIds.png);assert(point(0,0)[3]===0&&point(.5,.5)[3]===255,'恢复 PNG 未真正渲染');await activate(recoveryIds.svg);assert(Number(el('layer-count').textContent)>=20,'恢复 SVG 未真正解析');return{failed:title(failed),loaded:[title(pngTab),title(svgTab)]};
+      });
+      await check('拖放多个文件追加标签，关闭失败标签不影响当前画面',async()=>{
+        const before=pixels(),current=active().dataset.documentId;await close(recoveryIds.bad);assert(active()?.dataset.documentId===current,'关闭失败标签改变当前文档');samePixels(before,'关闭失败标签改变 SVG');
+        const droppedPng=new win.File([files.png],'拖放透明.png',{type:'image/png'}),droppedSvg=new win.File([files.svg],'拖放矢量.svg',{type:'image/svg+xml'});
+        dropFiles([droppedPng,droppedSvg]);await allLoaded(4);assert(tab(recoveryIds.png)&&tab(recoveryIds.svg),'拖放覆盖了原有文档');assert(tabNamed(droppedPng.name)&&tabNamed(droppedSvg.name),'拖放没有追加两个文件');assert(!tabs().some(node=>node.classList.contains('failed')),'拖放有效文件失败');return{tabs:tabs().map(title)};
+      });
+      await check('全部关闭后仍可再次批量打开，最后保留三种真实示例',async()=>{
+        await closeAll();importFiles([files.psd,files.svg,files.png]);await allLoaded(3);await rememberDocuments();await activate(identities.svg);assert(Number(el('layer-count').textContent)>=20&&!canvas().hidden,'最终矢量示例不可见');return{tabs:tabs().map(title),active:title(active()),canvas:{width:canvas().width,height:canvas().height}};
+      });
+    }catch(error){await check('多文档流程异常',()=>{throw error;});}
+    finally{busy=false;update();}
+  }
+  $('run').onclick=run;run();
+})();
+</script>
+</html>

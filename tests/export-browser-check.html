@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LayerDesk · 图片与水印导出验收</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#17191d;color:#dce1e8;font:14px/1.65 system-ui,-apple-system,sans-serif}main{max-width:1100px;margin:auto;padding:28px}h1{font-size:23px;margin:0 0 8px}p{color:#99a5b8;margin:0 0 18px}button{background:#2b3342;color:#e5ecf8;border:1px solid #46536a;border-radius:5px;padding:8px 14px;margin:0 10px 10px 0;cursor:pointer}button:disabled{opacity:.4;cursor:wait}a{color:#8dbbff}#summary{padding:14px 16px;background:#252a34;border:1px solid #3d485a;border-radius:6px;margin:12px 0;font-weight:600}.pass{color:#80ddb0}.fail{color:#ff8b8b}.running{color:#8dbbff}li{padding:6px 10px;border-bottom:1px solid #303641}ol{padding-left:26px}#previews{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}figure{margin:10px 0;min-width:0}figcaption{font-size:12px;color:#aeb9ca}canvas{display:block;width:100%;height:auto;margin-top:8px;border:1px solid #46536a;background:repeating-conic-gradient(#fff 0 25%,#ddd 0 50%) 50%/16px 16px}pre{font:12px/1.6 ui-monospace,monospace;padding:18px;background:#101216;border:1px solid #303641;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:5px}
+</style>
+<main>
+  <h1>图片与水印导出验收</h1>
+  <p>直接运行交付 HTML 内的 Worker。检查 PNG / JPG 的实际编码、透明与背景、水印位置和强度、缩小输出及导出预览的一致性。</p>
+  <div><button id="run">重新运行</button><button id="save">保存验收 JSON</button><a href="../index.html">返回工具</a></div>
+  <div id="summary" aria-live="polite">准备验收…</div>
+  <ol id="checks"></ol>
+  <div id="previews"></div>
+  <pre id="result">{}</pre>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const assert=(value,message)=>{if(!value)throw new Error(message);};
+  const flatten=nodes=>(nodes||[]).flatMap(node=>[node,...flatten(node.children)]);
+  const pending=new Map(),checks=[];
+  let worker,workerUrl,nextId=0,busy=false;
+  const watermark={enabled:true,text:'SAMPLE',position:'bottom-right',opacity:1,size:8,color:'#ff0055'};
+  const noWatermark={enabled:false};
+  function update(){
+    const result={done:!busy,passed:checks.filter(c=>c.pass).length,failed:checks.filter(c=>!c.pass).length,checks};
+    window.__qaResult=result;
+    $('result').textContent=JSON.stringify(result,null,2);
+    $('summary').textContent=`${busy?'运行中':'验收结束'} · ${result.passed} 项通过 · ${result.failed} 项失败`;
+    $('summary').className=result.failed?'fail':busy?'running':'pass';
+    $('run').disabled=busy;$('save').disabled=busy;
+  }
+  async function check(name,fn){
+    const line=document.createElement('li');line.className='running';line.textContent=`运行 · ${name}`;$('checks').append(line);
+    const start=performance.now();
+    try{
+      const detail=await fn();checks.push({name,pass:true,ms:Math.round(performance.now()-start),...(detail===undefined?{}:{detail})});
+      line.className='pass';line.textContent=`PASS · ${name}`;
+    }catch(error){
+      checks.push({name,pass:false,ms:Math.round(performance.now()-start),error:error.message});line.className='fail';line.textContent=`FAIL · ${name} · ${error.message}`;
+    }
+    update();
+  }
+  function request(type,args={}){
+    return new Promise((resolve,reject)=>{
+      const id=++nextId,timeout=setTimeout(()=>{pending.delete(id);reject(new Error(`${type} 超过 60 秒`));},60000);
+      pending.set(id,{resolve,reject,timeout});worker.postMessage({id,type,...args});
+    });
+  }
+  function capture(bitmap,label,show=false){
+    assert(bitmap instanceof ImageBitmap,'未返回真实 ImageBitmap');
+    const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+    if(show){const figure=document.createElement('figure'),caption=document.createElement('figcaption');caption.textContent=label;figure.append(caption,c);$('previews').append(figure);}
+    return c;
+  }
+  const decode=async(blob,label,show=false)=>capture(await createImageBitmap(blob),label,show);
+  const data=c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+  const pixel=(c,x,y)=>[...c.getContext('2d').getImageData(x,y,1,1).data];
+  const near=(a,b,tolerance)=>a.every((v,i)=>Math.abs(v-b[i])<=tolerance);
+  function scaled(c,width,height){const result=document.createElement('canvas');result.width=width;result.height=height;const ctx=result.getContext('2d');ctx.imageSmoothingQuality='high';ctx.drawImage(c,0,0,width,height);return result;}
+  function difference(a,b,threshold=3){
+    assert(a.width===b.width&&a.height===b.height,'比较图片尺寸不一致');
+    const first=data(a),second=data(b),cells=new Set();let count=0,energy=0,left=a.width,top=a.height,right=-1,bottom=-1;
+    for(let i=0;i<first.length;i+=4){
+      let largest=0;for(let j=0;j<4;j++){const d=Math.abs(first[i+j]-second[i+j]);largest=Math.max(largest,d);energy+=d;}
+      if(largest>threshold){const x=(i/4)%a.width,y=Math.floor(i/4/a.width);count++;left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);cells.add(`${Math.min(2,Math.floor(x/a.width*3))},${Math.min(2,Math.floor(y/a.height*3))}`);}
+    }
+    return {count,energy,mean:energy/first.length,bounds:count?{left,top,right,bottom,centerX:(left+right)/2,centerY:(top+bottom)/2}:null,cells:[...cells]};
+  }
+  async function exportCanvas(options={},label,show=false){
+    const r=await request('export',{mode:'original',...options});
+    assert(r.blob instanceof Blob,'未返回实际图片 Blob');
+    const c=await decode(r.blob,label,show);return {response:r,canvas:c};
+  }
+  function assertDimensions(c,width,height){assert(c.width===width&&c.height===height,`尺寸 ${c.width}×${c.height}，预期 ${width}×${height}`);}
+  async function signature(blob){return [...new Uint8Array(await blob.slice(0,8).arrayBuffer())];}
+  function base64File(value,name){const raw=atob(value),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return new File([bytes],name);}
+  async function initialize(){
+    const response=await fetch('../index.html');assert(response.ok,'请先构建交付 HTML');
+    const dom=new DOMParser().parseFromString(await response.text(),'text/html');
+    const source=dom.getElementById('psd-worker-source')?.textContent,demo=dom.getElementById('demo-psd-data')?.textContent.trim();
+    assert(source&&demo,'交付 HTML 中缺少 Worker 或示例');
+    if(worker)worker.terminate();if(workerUrl)URL.revokeObjectURL(workerUrl);
+    for(const p of pending.values()){clearTimeout(p.timeout);p.reject(new Error('验收重置'));}pending.clear();
+    workerUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));worker=new Worker(workerUrl);
+    worker.onmessage=event=>{const r=event.data,p=pending.get(r.id);if(!p){r.bitmap?.close();return;}pending.delete(r.id);clearTimeout(p.timeout);r.ok?p.resolve(r):p.reject(new Error(r.error||'Worker 操作失败'));};
+    worker.onerror=event=>{for(const p of pending.values()){clearTimeout(p.timeout);p.reject(new Error(event.message));}pending.clear();};
+    const opened=await request('open',{file:base64File(demo,'形与感.psd')});assert(opened.doc.width===1000&&opened.doc.height===750,'示例尺寸异常');return opened.doc;
+  }
+  async function run(){
+    if(busy)return;busy=true;checks.length=0;$('checks').replaceChildren();$('previews').replaceChildren();update();
+    try{
+      const doc=await initialize();
+      const initial=capture((await request('render',{mode:'original',maxSize:1000})).bitmap,'原始画面');
+      let baseline,cornerMarked,tileMarked;
+      await check('默认导出仍为真实 PNG，尺寸与原始 PSD 一致',async()=>{
+        const {response,canvas}=await exportCanvas({},'无水印 PNG',true);baseline=canvas;
+        assert(response.blob.type==='image/png','默认 MIME 不是 PNG');
+        assert(JSON.stringify(await signature(response.blob))===JSON.stringify([137,80,78,71,13,10,26,10]),'PNG 文件签名错误');
+        assertDimensions(canvas,doc.width,doc.height);assert(difference(initial,canvas).count===0,'默认导出改变了原图像素');
+        return {bytes:response.blob.size,width:canvas.width,height:canvas.height};
+      });
+      if(!baseline)throw new Error('基准 PNG 导出失败，无法继续像素对比');
+      await check('JPG 是实际 JPEG 编码，质量设置影响文件体积',async()=>{
+        const low=await exportCanvas({format:'jpeg',quality:.6,watermark:noWatermark});
+        const high=await exportCanvas({format:'jpeg',quality:1,watermark:noWatermark},'JPG · 质量 100%',true);
+        for(const result of [low,high]){
+          const bytes=await signature(result.response.blob),end=[...new Uint8Array(await result.response.blob.slice(-2).arrayBuffer())];
+          assert(result.response.blob.type==='image/jpeg'&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255&&end[0]===255&&end[1]===217,'JPEG MIME 或文件签名错误');
+          assertDimensions(result.canvas,doc.width,doc.height);
+        }
+        assert(high.response.blob.size>low.response.blob.size,'JPEG 质量未影响编码体积');
+        return {quality60Bytes:low.response.blob.size,quality100Bytes:high.response.blob.size};
+      });
+      await check('关闭水印保留原图，透明度 0 等同无水印',async()=>{
+        const disabled=await exportCanvas({format:'png',watermark:{...watermark,enabled:false}});
+        const invisible=await exportCanvas({format:'png',watermark:{...watermark,opacity:0}});
+        assert(difference(baseline,disabled.canvas).count===0,'关闭水印仍改变图片');
+        assert(difference(baseline,invisible.canvas).count===0,'0% 透明度仍改变图片');
+      });
+      for(const position of ['bottom-right','bottom-left','top-right','top-left','center','tile']){
+        await check(`文字水印实际出现在指定位置：${position}`,async()=>{
+          const result=await exportCanvas({format:'png',watermark:{...watermark,position}},`文字水印 · ${position}`,position==='bottom-right'||position==='tile');
+          const diff=difference(baseline,result.canvas);assert(diff.count>100,'导出图片没有可见水印');
+          const b=diff.bounds;
+          if(position==='center')assert(Math.abs(b.centerX-doc.width/2)<doc.width*.16&&Math.abs(b.centerY-doc.height/2)<doc.height*.16,'居中位置偏移过大');
+          else if(position==='tile'){
+            assert(diff.cells.length>=6,'平铺水印只覆盖了局部区域');
+            assert(b.right-b.left>doc.width*.55&&b.bottom-b.top>doc.height*.55,'平铺没有覆盖画面宽度和高度');tileMarked=result.canvas;
+          }else{
+            assert(position.endsWith('right')?b.centerX>doc.width/2:b.centerX<doc.width/2,'水印左右位置错误');
+            assert(position.startsWith('bottom')?b.centerY>doc.height/2:b.centerY<doc.height/2,'水印上下位置错误');
+          }
+          if(position==='bottom-right')cornerMarked=result.canvas;
+          return {changedPixels:diff.count,bounds:diff.bounds,occupiedGridCells:diff.cells.length};
+        });
+      }
+      await check('水印大小与透明度控制改变实际图像',async()=>{
+        const small=await exportCanvas({watermark:{...watermark,position:'center',size:4}});
+        const large=await exportCanvas({watermark:{...watermark,position:'center',size:10}});
+        const low=await exportCanvas({watermark:{...watermark,position:'center',opacity:.2}});
+        const high=await exportCanvas({watermark:{...watermark,position:'center',opacity:.8}});
+        const smallDiff=difference(baseline,small.canvas),largeDiff=difference(baseline,large.canvas),lowDiff=difference(baseline,low.canvas),highDiff=difference(baseline,high.canvas);
+        assert(largeDiff.count>smallDiff.count*1.4,'改变大小没有扩大字形范围');
+        assert(highDiff.energy>lowDiff.energy*1.3,'改变透明度没有改变水印强度');
+        return {smallPixels:smallDiff.count,largePixels:largeDiff.count,opacity20Energy:lowDiff.energy,opacity80Energy:highDiff.energy};
+      });
+      await check('自定义文字与颜色均体现在导出结果中',async()=>{
+        const blue=await exportCanvas({watermark:{...watermark,color:'#0055ff'}});
+        const other=await exportCanvas({watermark:{...watermark,text:'DO NOT COPY'}});
+        assert(cornerMarked,'缺少对比样本');
+        assert(difference(cornerMarked,blue.canvas).count>100,'水印颜色设置未生效');
+        assert(difference(cornerMarked,other.canvas).count>100,'水印文字设置未生效');
+      });
+      await check('水印导出不污染原始预览与后续无水印导出',async()=>{
+        const unchanged=capture((await request('render',{mode:'original',maxSize:1000})).bitmap,'再次读取原始画面');
+        const plain=await exportCanvas({watermark:noWatermark});
+        assert(difference(initial,unchanged).count===0,'主画面缓存被水印污染');
+        assert(difference(baseline,plain.canvas).count===0,'后续无水印导出仍残留水印');
+      });
+      await check('长文字水印可以正常导出且保持画布尺寸',async()=>{
+        const r=await exportCanvas({watermark:{...watermark,text:'LONG SAMPLE WATERMARK '.repeat(12),size:15}});
+        assertDimensions(r.canvas,doc.width,doc.height);const diff=difference(baseline,r.canvas);
+        assert(diff.count>30,'长文字水印未显示');return {changedPixels:diff.count,bounds:diff.bounds};
+      });
+      await check('启用水印时，空白内容返回明确错误',async()=>{
+        let error;try{await request('export',{mode:'original',watermark:{...watermark,text:'   \n   '}});}catch(e){error=e.message;}
+        assert(error&&/水印|文字|内容|text/i.test(error),'空白水印未返回明确错误');return error;
+      });
+      await check('导出预览与完整 PNG 缩小后的位置和效果一致',async()=>{
+        const unmarked=await request('exportPreview',{mode:'original',format:'png',maxSize:500,watermark:noWatermark});
+        const previewBase=capture(unmarked.bitmap,'无水印导出预览');
+        const r=await request('exportPreview',{mode:'original',format:'png',maxSize:500,watermark});
+        const preview=capture(r.bitmap,'导出预览 · 500 px',true);assertDimensions(preview,500,375);
+        assert(cornerMarked,'缺少完整带水印样本');
+        const expected=scaled(cornerMarked,500,375),base=scaled(baseline,500,375),actualDiff=difference(previewBase,preview),expectedDiff=difference(base,expected);
+        assert(actualDiff.count>25,'预览中没有水印');
+        assert(difference(expected,preview).mean<8,'预览与实际导出的平均像素差异过大');
+        assert(Math.abs(actualDiff.bounds.centerX-expectedDiff.bounds.centerX)<12&&Math.abs(actualDiff.bounds.centerY-expectedDiff.bounds.centerY)<12,'预览水印位置与导出不一致');
+        return {width:r.width,height:r.height,meanPixelDifference:difference(expected,preview).mean};
+      });
+      await check('缩小导出保持比例，预览报告计划输出尺寸',async()=>{
+        const full=await exportCanvas({format:'png',exportSize:128,watermark:{...watermark,size:10}});
+        assertDimensions(full.canvas,128,96);
+        const originalSmall=await exportCanvas({format:'png',exportSize:128,watermark:noWatermark});
+        assert(difference(full.canvas,originalSmall.canvas,1).count>3,'缩小输出后水印消失');
+        const preview=await request('exportPreview',{mode:'original',format:'png',maxSize:96,exportSize:128,watermark});
+        const image=capture(preview.bitmap,'缩小导出预览');assertDimensions(image,96,72);
+        assert(preview.exportWidth===128&&preview.exportHeight===96,`预览输出尺寸 ${preview.exportWidth}×${preview.exportHeight} 错误`);
+        return {exportWidth:full.canvas.width,exportHeight:full.canvas.height,previewWidth:image.width,previewHeight:image.height};
+      });
+      const fixtureResponse=await fetch('compositing.psd');assert(fixtureResponse.ok,'缺少合成测试 PSD');
+      const opened=await request('open',{file:new File([await fixtureResponse.blob()],'compositing.psd')});
+      const target=flatten(opened.doc.children).find(n=>n.name==='magenta with left half mask');assert(target,'缺少蒙版目标图层');
+      const layerOptions={mode:'layer',layerId:target.id};
+      let transparentPNG;
+      await check('单层 PNG 保留普通蒙版与透明背景',async()=>{
+        const r=await exportCanvas({...layerOptions,format:'png',watermark:noWatermark},'单层 PNG · 保留透明',true);transparentPNG=r.canvas;
+        assertDimensions(r.canvas,target.width,target.height);assert(pixel(r.canvas,28,20)[3]===0,'PNG 将透明区域填成了不透明颜色');
+        assert(near(pixel(r.canvas,2,2),[255,0,255,255],2),'PNG 蒙版实心部分错误');
+      });
+      await check('单层 JPG 不透明，并使用指定背景色填充透明区域',async()=>{
+        const r=await exportCanvas({...layerOptions,format:'jpeg',quality:1,background:'#2080c0',watermark:noWatermark},'单层 JPG · 蓝色背景',true);
+        assertDimensions(r.canvas,target.width,target.height);const pixels=data(r.canvas);
+        for(let i=3;i<pixels.length;i+=4)assert(pixels[i]===255,'JPG 中仍存在透明像素');
+        const actual=pixel(r.canvas,28,20);assert(near(actual,[32,128,192,255],12),`JPG 背景色错误：${actual}`);
+        return {backgroundPixel:actual};
+      });
+      await check('单层导出预览同样应用 JPG 背景色',async()=>{
+        const r=await request('exportPreview',{...layerOptions,format:'jpeg',background:'#2080c0',maxSize:900,watermark:noWatermark});
+        const c=capture(r.bitmap,'单层 JPG 预览');assertDimensions(c,target.width,target.height);
+        assert(near(pixel(c,28,20),[32,128,192,255],2),'JPG 预览没有填背景');
+      });
+      await check('添加水印后的 PNG 仍保留透明区域',async()=>{
+        const r=await exportCanvas({...layerOptions,format:'png',watermark:{...watermark,text:'S',position:'center',size:15,opacity:.7}});
+        assert(transparentPNG,'缺少透明 PNG 对照');const pixels=data(r.canvas);let transparent=0;
+        for(let i=3;i<pixels.length;i+=4)if(pixels[i]===0)transparent++;
+        assert(transparent>50,'水印操作将整张 PNG 变成了不透明图片');
+        assert(difference(transparentPNG,r.canvas,1).count>0,'透明图层上的水印未生效');return {transparentPixels:transparent};
+      });
+    }catch(error){await check('验收准备与运行',()=>{throw error;});}
+    finally{busy=false;update();}
+  }
+  $('run').onclick=run;
+  $('save').onclick=()=>{const url=URL.createObjectURL(new Blob([$('result').textContent],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='export-browser-results.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);};
+  run();
+})();
+</script>
+</html>

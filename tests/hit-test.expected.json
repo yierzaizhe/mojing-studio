@@ -1,0 +1,274 @@
+{
+  "cases": [
+    {
+      "file": "hit-test",
+      "at": [
+        4,
+        8
+      ],
+      "expected": "masked child",
+      "why": "ancestor group white mask preserves child"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        14,
+        8
+      ],
+      "expected": "background",
+      "why": "ancestor group black mask removes child"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        30,
+        8
+      ],
+      "expected": "background",
+      "why": "zero opacity group excludes child"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        52,
+        8
+      ],
+      "expected": "background",
+      "why": "zero opacity leaf is not selectable"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        3,
+        34
+      ],
+      "expected": "transparent hole",
+      "why": "opaque border remains selectable"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        10,
+        34
+      ],
+      "expected": "background",
+      "why": "transparent hole does not capture click"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        26,
+        26
+      ],
+      "expected": "vector with hole",
+      "why": "uncached native vector can be selected"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        34,
+        34
+      ],
+      "expected": "background",
+      "why": "vector subtract path leaves a hole"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        52,
+        34
+      ],
+      "expected": "background",
+      "why": "hidden ancestor excludes child"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        52,
+        34
+      ],
+      "expected": "hidden group child",
+      "hiddenNames": [],
+      "why": "showing initial hidden group enables child"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        52,
+        34
+      ],
+      "expected": "hidden group child",
+      "scope": "hidden group",
+      "why": "single group mode ignores group own hidden flag"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        52,
+        8
+      ],
+      "expected": "zero opacity leaf",
+      "scope": "zero opacity leaf",
+      "why": "single layer mode follows displayed own opacity"
+    },
+    {
+      "file": "hit-test",
+      "at": [
+        -2,
+        8
+      ],
+      "expected": null,
+      "why": "outside document does not select anything"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        12,
+        12
+      ],
+      "expected": "red square",
+      "candidates": [
+        "red square",
+        "white background"
+      ],
+      "why": "hidden top layer is skipped and candidates retain z order"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        12,
+        12
+      ],
+      "expected": "hidden blue square",
+      "hiddenNames": [],
+      "why": "showing a hidden top layer changes hit target"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        52,
+        12
+      ],
+      "expected": "blue in group",
+      "why": "group opacity preserves visible child target"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        64,
+        20
+      ],
+      "expected": "green in group",
+      "candidates": [
+        "green in group",
+        "blue in group",
+        "white background"
+      ],
+      "why": "overlapping group children are returned top to bottom"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        8,
+        56
+      ],
+      "expected": "magenta with left half mask",
+      "why": "white bitmap mask allows selection"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        28,
+        56
+      ],
+      "expected": "white background",
+      "why": "black bitmap mask prevents selection"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        60,
+        60
+      ],
+      "expected": "clipped orange",
+      "candidates": [
+        "clipped orange",
+        "clipping base circle",
+        "white background"
+      ],
+      "why": "clip inside base is selectable above base"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        46,
+        46
+      ],
+      "expected": "white background",
+      "why": "clip outside base alpha is excluded"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        60,
+        60
+      ],
+      "expected": "white background",
+      "hiddenNames": [
+        "hidden blue square",
+        "clipping base circle"
+      ],
+      "why": "hidden clipping base suppresses clipped layers"
+    },
+    {
+      "file": "compositing",
+      "at": [
+        100,
+        8
+      ],
+      "expected": "multiply magenta",
+      "candidates": [
+        "multiply magenta",
+        "multiply base yellow",
+        "white background"
+      ],
+      "why": "blend layers preserve visual stack selection order"
+    },
+    {
+      "file": "demo",
+      "at": [
+        650,
+        130
+      ],
+      "expected": "蓝色竖向色块",
+      "why": "demo blue rectangle is picked through transparent overlay layers"
+    },
+    {
+      "file": "demo",
+      "at": [
+        650,
+        380
+      ],
+      "expected": "橙色球体",
+      "why": "demo orange sphere can be picked"
+    },
+    {
+      "file": "demo",
+      "at": [
+        520,
+        235
+      ],
+      "expected": "暖灰纸张",
+      "why": "transparent circle bounds corner does not pick the sphere"
+    },
+    {
+      "file": "demo",
+      "at": [
+        820,
+        570
+      ],
+      "expected": "蓝色竖向色块",
+      "why": "transparent semicircle corner does not capture background rectangle"
+    }
+  ]
+}

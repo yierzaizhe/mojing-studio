@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>墨境 Studio · 7 组图片滤镜验收</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#17191d;color:#dce1e8;font:14px/1.65 system-ui,sans-serif}main{max-width:1460px;margin:auto;padding:26px}h1{font-size:24px;margin:0 0 8px}p{color:#a5afbd;margin:8px 0 14px}button{padding:8px 14px;background:#2b3342;color:#e5ecf8;border:1px solid #46536a;border-radius:5px;cursor:pointer}button:disabled{opacity:.5}a{color:#8dbbff}#summary{padding:13px 16px;background:#252a34;border:1px solid #3d485a;margin:16px 0}.pass{color:#80ddb0}.fail{color:#ff8b8b}.running{color:#8dbbff}li{padding:4px 0}iframe{display:block;width:100%;height:810px;border:1px solid #535a66;background:#292929}pre{font:12px/1.6 ui-monospace,monospace;padding:16px;background:#101216;white-space:pre-wrap;overflow-wrap:anywhere}#previews{display:flex;gap:16px;flex-wrap:wrap}figure{margin:12px 0}figure canvas{display:block;max-width:320px;border:1px solid #46536a;background:repeating-conic-gradient(#fff 0 25%,#ddd 0 50%) 50%/16px 16px}figcaption{font-size:12px;color:#9ba9bb}
+</style>
+<main>
+<h1>图片滤镜 · 7 组预设验收</h1>
+<p>使用交付 HTML 的真实界面、图片适配器和导出 Worker，检查预设缩略图、调节、原图对比、多文档恢复、透明导出及快速操作的最终画面。</p>
+<button id="run">重新运行</button> <a href="../index.html">返回工具</a>
+<div id="summary" aria-live="polite">准备验收…</div><ol id="checks"></ol>
+<iframe id="preview" title="墨境 Studio 真实图片滤镜界面"></iframe>
+<div id="previews"></div><pre id="result">{}</pre>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id),records=[],pending=new Map();
+  const keys=['brightness','contrast','saturation','temperature','sharpness','strength'];
+  const assert=(value,message)=>{if(!value)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  let busy=false,win,doc,filters,worker,workerUrl,counter=0,adapter,probe,alternate,basePixels,imageA,imageB;
+  const el=id=>doc.getElementById(id),canvas=()=>el('stage-canvas');
+  const tabs=()=>[...doc.querySelectorAll('#document-tabs .document-tab-item[data-document-id]')];
+  const named=name=>tabs().find(node=>node.querySelector('[role="tab"]')?.textContent.includes(name));
+  const activeId=()=>doc.querySelector('#document-tabs .document-tab-item.active')?.dataset.documentId;
+  const tab=id=>tabs().find(node=>node.dataset.documentId===id);
+  function update(){const r={done:!busy,passed:records.filter(x=>x.pass).length,failed:records.filter(x=>!x.pass).length,checks:records};window.__imageFiltersBrowserResult=r;$('result').textContent=JSON.stringify(r,null,2);$('summary').textContent=`${busy?'运行中':'验收结束'} · ${r.passed} 项通过 · ${r.failed} 项失败`;$('summary').className=r.failed?'fail':busy?'running':'pass';$('run').disabled=busy;}
+  async function check(name,fn){const li=document.createElement('li'),started=performance.now();li.className='running';li.textContent=`运行 · ${name}`;$('checks').append(li);try{const detail=await fn();records.push({name,pass:true,ms:Math.round(performance.now()-started),...(detail===undefined?{}:{detail})});li.className='pass';li.textContent=`PASS · ${name}`;}catch(error){records.push({name,pass:false,ms:Math.round(performance.now()-started),error:error.message});li.className='fail';li.textContent=`FAIL · ${name} · ${error.message}`;}update();}
+  async function until(fn,message,timeout=25000){const start=performance.now();while(performance.now()-start<timeout){const value=fn();if(value)return value;await sleep(25);}throw new Error(`等待超时：${message}`);}
+  function settle(){return new Promise(resolve=>{const fallback=setTimeout(resolve,160);win.requestAnimationFrame(()=>win.requestAnimationFrame(()=>{clearTimeout(fallback);resolve();}));});}
+  const idle=()=>el('canvas-viewport').getAttribute('aria-busy')==='false'&&el('loading-overlay').hidden&&!/正在/.test(el('filter-status')?.textContent||'');
+  async function committed(){await sleep(70);await until(()=>!canvas().hidden&&canvas().width>1&&idle(),'滤镜画面提交');await settle();await sleep(25);}
+  function snapshot(c=canvas()){return{width:c.width,height:c.height,data:new Uint8ClampedArray(c.getContext('2d').getImageData(0,0,c.width,c.height).data)};}
+  function point(p,x,y){const i=(y*p.width+x)*4;return [...p.data.slice(i,i+4)];}
+  // Compare visible colour coverage, while checking alpha independently. Tiny
+  // alpha values can otherwise magnify harmless Canvas premultiplication rounding.
+  function differences(a,b,tolerance=1){assert(a.width===b.width&&a.height===b.height,'比较图像尺寸不同');let changed=0,total=0,alpha=0;for(let i=0;i<a.data.length;i+=4){let different=false;const coverage=Math.max(a.data[i+3],b.data[i+3])/255;for(let j=0;j<3;j++){const delta=Math.abs(a.data[i+j]-b.data[i+j])*coverage;total+=delta;if(delta>tolerance)different=true;}if(different)changed++;if(a.data[i+3]!==b.data[i+3])alpha++;}return{changed,alpha,mean:total/(a.width*a.height*3)};}
+  function same(a,b,message,tolerance=1){const d=differences(a,b,tolerance);assert(d.changed===0&&d.alpha===0,`${message}：${d.changed} 像素、${d.alpha} 个透明度发生变化`);}
+  function capture(bitmap,label,show=false){assert(bitmap&&bitmap.width&&bitmap.height,'未返回可显示的 ImageBitmap');const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);bitmap.close();if(show){const f=document.createElement('figure'),cap=document.createElement('figcaption');cap.textContent=label;f.append(cap,c);$('previews').append(f);}return snapshot(c);}
+  function settings(){return Object.fromEntries(keys.map(key=>[key,Number(el(`adjust-${key}`).value)]));}
+  function input(id,value,type='input'){const node=el(id);assert(node,`缺少 ${id}`);if(node.type==='checkbox')node.checked=!!value;else node.value=String(value);node.dispatchEvent(new win.Event(type,{bubbles:true}));}
+  function mode(value){input('mode-select',value,'change');}
+  function importFile(file){const transfer=new win.DataTransfer();transfer.items.add(file);el('file-input').files=transfer.files;el('file-input').dispatchEvent(new win.Event('change',{bubbles:true}));}
+  async function activate(id){const node=tab(id);assert(node,'目标标签不存在');node.querySelector('[role="tab"]').click();await until(()=>activeId()===id,'标签激活');await committed();}
+  function thumbnail(id){return doc.querySelector(`#filter-presets [data-filter-preset="${id}"] canvas`);}
+  async function thumbnailsReady(){await until(()=>filters.PRESETS.every(p=>{const c=thumbnail(p.id);if(!c)return false;const a=c.getContext('2d').getImageData(0,0,c.width,c.height).data;for(let i=3;i<a.length;i+=4)if(a[i])return true;return false;}),'7 个当前图片预设缩略图');await settle();}
+  async function reset(){el('filter-reset').click();await committed();}
+  async function directRender(adjustments={},extra={}){return capture((await adapter.handle('render',{mode:'composite',maxSize:320,adjustments,...extra})).bitmap);}
+  function requestWorker(type,payload={},transfer=[]){return new Promise((resolve,reject)=>{const id=++counter,timer=setTimeout(()=>{pending.delete(id);reject(new Error(`${type} 超过 30 秒`));},30000);pending.set(id,{resolve,reject,timer});worker.postMessage({id,type,...payload},transfer);});}
+  async function fixture(name){const r=await fetch(name,{cache:'no-store'});assert(r.ok,`缺少 ${name}`);return new win.File([await r.blob()],name,{type:'image/png'});}
+  async function initialize(){
+    const response=await fetch('../index.html',{cache:'no-store'});assert(response.ok,'请先构建交付 HTML');const html=await response.text();
+    const iframe=$('preview'),loaded=new Promise(resolve=>iframe.addEventListener('load',resolve,{once:true}));iframe.srcdoc=html;await loaded;win=iframe.contentWindow;doc=iframe.contentDocument;
+    await until(()=>el('file-input')?.onchange&&el('open-btn')?.onclick,'真实界面事件绑定');
+    filters=win.LayerDeskFilters;assert(filters?.PRESETS?.length===7&&win.LayerDeskImageDocument,'交付 HTML 缺少 7 组滤镜或图片适配器');
+    if(worker)worker.terminate();if(workerUrl)URL.revokeObjectURL(workerUrl);
+    workerUrl=URL.createObjectURL(new Blob([el('psd-worker-source').textContent],{type:'text/javascript'}));worker=new Worker(workerUrl);
+    worker.onmessage=e=>{const r=e.data,p=pending.get(r.id);if(!p){r.bitmap?.close();return;}pending.delete(r.id);clearTimeout(p.timer);r.ok?p.resolve(r):p.reject(new Error(r.error||'Worker 失败'));};
+    worker.onerror=e=>{for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error(e.message));}pending.clear();};
+    probe=await fixture('image-filter-probe.png');alternate=await fixture('image-filter-alternate.png');
+    adapter?.dispose();adapter=new win.LayerDeskImageDocument({requestWorker});await adapter.open(probe);
+    basePixels=capture((await adapter.handle('render',{mode:'original',maxSize:320})).bitmap,'原始透明测试图片',true);
+  }
+  async function run(){
+    if(busy)return;busy=true;records.length=0;$('checks').replaceChildren();$('previews').replaceChildren();update();
+    try{
+      await check('真实图片导入后默认打开调整面板，六项参数保持原图',async()=>{
+        await initialize();importFile(probe);await until(()=>named(probe.name)&&!named(probe.name).matches('.queued,.loading'),'图片导入');imageA=named(probe.name).dataset.documentId;await committed();
+        assert(!el('sidebar-adjust-panel').hidden&&el('sidebar-adjust-tab').getAttribute('aria-selected')==='true','图片没有默认显示调整面板');
+        assert(keys.every(k=>settings()[k]===filters.DEFAULTS[k]),'初始调节参数不是默认值');same(snapshot(),basePixels,'导入时改变了图片');
+        return{width:canvas().width,height:canvas().height,settings:settings()};
+      });
+      if(!doc||!filters||!imageA)return;
+      await check('七个预设以当前图生成缩略图，人像柔和及暖调点击后同步真实画面',async()=>{
+        const buttons=[...doc.querySelectorAll('#filter-presets [data-filter-preset]')];assert(buttons.length===7,'预设按钮数量错误');await thumbnailsReady();
+        const portrait=filters.PRESETS.find(x=>x.id==='portrait'),portraitButton=buttons.find(b=>b.dataset.filterPreset==='portrait');
+        assert(portrait&&portraitButton&&portraitButton.textContent.includes('人像柔和'),'缺少人像柔和预设按钮或名称');
+        const portraitExpected={brightness:7,contrast:-10,saturation:-4,temperature:6,sharpness:0,strength:100};
+        assert(keys.every(k=>portrait.settings[k]===portraitExpected[k]),'人像柔和预设参数不符合约定');
+        portraitButton.click();await committed();
+        assert(portraitButton.getAttribute('aria-pressed')==='true'||portraitButton.classList.contains('is-active'),'人像柔和没有选中状态');
+        const portraitSettings=settings(),portraitChange=differences(snapshot(),basePixels);
+        assert(keys.every(k=>portraitSettings[k]===portraitExpected[k]),'人像柔和参数未同步至滑块');assert(portraitChange.changed>200,'人像柔和没有改变真实画面');
+        const p=filters.PRESETS.find(x=>x.id==='warm')||filters.PRESETS[1],button=buttons.find(b=>b.dataset.filterPreset===p.id);button.click();await committed();
+        assert(button.getAttribute('aria-pressed')==='true'||button.classList.contains('is-active'),'预设没有选中状态');
+        const got=settings();assert(keys.every(k=>got[k]===p.settings[k]),'预设参数未同步至滑块');assert(differences(snapshot(),basePixels).changed>200,'预设没有改变真实画面');
+        assert(el('mode-select').value==='composite','预设后没有进入调整画面');return{portrait:{id:portrait.id,settings:portraitSettings,changedPixels:portraitChange.changed},id:p.id,settings:got};
+      });
+      await check('亮度、对比度、饱和度、色温和锐化均产生对应图像变化',async()=>{
+        const results={};for(const key of keys.filter(k=>k!=='strength')){
+          await reset();input(`adjust-${key}`,key==='saturation'?-100:60);await committed();const p=snapshot(),diff=differences(p,basePixels);assert(diff.changed>20,`${key} 没有改变像素`);assert(diff.alpha===0,`${key} 改变透明度`);
+          const low=point(p,40,44),high=point(p,174,44),red=point(p,58,136),neutral=point(p,105,44);
+          if(key==='brightness')assert(low[0]>point(basePixels,40,44)[0]+20,'提高亮度没有提亮灰阶');
+          if(key==='contrast')assert(low[0]<point(basePixels,40,44)[0]&&high[0]>point(basePixels,174,44)[0],'对比度没有拉开明暗');
+          if(key==='saturation')assert(Math.max(...red.slice(0,3))-Math.min(...red.slice(0,3))<=2,'饱和度 -100 仍有颜色');
+          if(key==='temperature')assert(neutral[0]-neutral[2]>20,'暖色温没有提高红蓝差');
+          results[key]={changed:diff.changed,mean:Math.round(diff.mean*100)/100};
+        }return results;
+      });
+      await check('整体强度 0 恢复原图、100 完整生效；恢复按钮清除全部调节',async()=>{
+        input('adjust-brightness',24);input('adjust-temperature',30);input('adjust-strength',0);await committed();same(snapshot(),basePixels,'强度 0 不是原图');
+        input('adjust-strength',100);await committed();assert(differences(snapshot(),basePixels).changed>200,'强度 100 没有生效');
+        input('adjust-strength',35);await committed();const partial=differences(snapshot(),basePixels).mean;
+        input('adjust-strength',100);await committed();assert(differences(snapshot(),basePixels).mean>partial,'强度没有改变滤镜程度');
+        await reset();assert(keys.every(k=>settings()[k]===filters.DEFAULTS[k]),'恢复按钮没有还原默认值');same(snapshot(),basePixels,'恢复按钮没有恢复画面');
+        return{restored:settings()};
+      });
+      let filtered;
+      await check('按住对比显示原图、松开恢复；原图模式忽略调节且不污染原始像素',async()=>{
+        doc.querySelector('#filter-presets [data-filter-preset="cool"]').click();await committed();filtered=snapshot();
+        el('filter-compare').dispatchEvent(new win.PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:17,pointerType:'mouse',button:0}));await committed();same(snapshot(),basePixels,'按住对比没有显示原图');
+        assert(el('filter-compare').getAttribute('aria-pressed')==='true','比较按钮没有按下状态');
+        el('filter-compare').dispatchEvent(new win.PointerEvent('pointerup',{bubbles:true,pointerId:17,pointerType:'mouse',button:0}));await committed();same(snapshot(),filtered,'松开对比没有恢复滤镜');
+        mode('original');await committed();same(snapshot(),basePixels,'原图模式应用了滤镜');mode('composite');await committed();same(snapshot(),filtered,'切回调整模式没有恢复');
+        const directOriginal=capture((await adapter.handle('render',{mode:'original',adjustments:settings(),maxSize:320})).bitmap);same(directOriginal,basePixels,'适配器原图被滤镜污染');
+      });
+      let savedA,thumbA,portraitThumbA;
+      await check('切换图片更新预设缩略图，并为每个标签恢复独立参数与画面',async()=>{
+        savedA=settings();const frameA=snapshot();await thumbnailsReady();thumbA=snapshot(thumbnail(filters.PRESETS[0].id));portraitThumbA=snapshot(thumbnail('portrait'));
+        importFile(alternate);await until(()=>named(alternate.name)&&!named(alternate.name).matches('.queued,.loading'),'第二张图片导入');imageB=named(alternate.name).dataset.documentId;await committed();await thumbnailsReady();
+        const thumbB=snapshot(thumbnail(filters.PRESETS[0].id)),portraitThumbB=snapshot(thumbnail('portrait'));assert(differences(thumbA,thumbB).changed>100,'第二张图仍在使用第一张图预设缩略图');
+        const portraitThumbnailChanged=differences(portraitThumbA,portraitThumbB).changed;assert(portraitThumbnailChanged>100,'人像柔和预设仍在使用第一张图缩略图');
+        assert(keys.every(k=>settings()[k]===filters.DEFAULTS[k]),'新图片继承了前一图片参数');input('adjust-brightness',-18);input('adjust-saturation',-25);await committed();const savedB=settings(),frameB=snapshot();
+        await activate(imageA);assert(keys.every(k=>settings()[k]===savedA[k]),'第一张图片参数未恢复');same(snapshot(),frameA,'第一张图恢复了错误画面');
+        await activate(imageB);assert(keys.every(k=>settings()[k]===savedB[k]),'第二张图片参数未恢复');same(snapshot(),frameB,'第二张图恢复了错误画面');await activate(imageA);
+        return{first:savedA,second:savedB,thumbnailChanged:differences(thumbA,thumbB).changed,portraitThumbnailChanged};
+      });
+      await check('滤镜 PNG 导出保留尺寸、透明边缘和半透明像素；强度 0 与原图一致',async()=>{
+        const adj={...settings(),brightness:18,temperature:20,sharpness:45,strength:100};
+        const preview=await directRender(adj),result=await adapter.handle('export',{mode:'composite',adjustments:adj,format:'png'}),exported=capture(await createImageBitmap(result.blob),'滤镜 PNG 导出',true);
+        assert(result.blob.type==='image/png'&&exported.width===320&&exported.height===240,'PNG 格式或尺寸错误');same(exported,preview,'PNG 与同尺寸调整画面不一致',2);
+        assert(differences(exported,basePixels).alpha===0,'滤镜改变了透明或半透明边缘');assert(point(exported,258,55)[3]>0&&point(exported,258,55)[3]<255,'半透明测试点丢失');
+        const identity=await adapter.handle('export',{mode:'composite',adjustments:{...adj,strength:0},format:'png'});same(capture(await createImageBitmap(identity.blob)),basePixels,'强度 0 的 PNG 不是原图');
+        const original=await adapter.handle('export',{mode:'original',adjustments:adj,format:'png'});same(capture(await createImageBitmap(original.blob)),basePixels,'原图 PNG 导出仍应用滤镜');
+        return{bytes:result.blob.size,alpha:point(exported,258,55)[3]};
+      });
+      await check('对比状态不进入导出快照；JPG 水印预览同时保留滤镜和指定背景',async()=>{
+        const adj=settings(),expected=await directRender(adj);
+        el('filter-compare').dispatchEvent(new win.PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:18,pointerType:'mouse',button:0}));await committed();same(snapshot(),basePixels,'导出前的比较状态不正确');
+        el('export-btn').click();await until(()=>el('export-dialog').open,'导出设置打开');input('export-format','png','change');input('watermark-enabled',false,'change');
+        await until(()=>!el('export-preview-canvas').hidden&&!/正在/.test(el('export-preview-status').textContent),'PNG 导出预览');await sleep(160);same(snapshot(el('export-preview-canvas')),expected,'按住比较时导出错误地采用了原图',2);
+        el('filter-compare').dispatchEvent(new win.PointerEvent('pointerup',{bubbles:true,pointerId:18,pointerType:'mouse',button:0}));
+        input('export-format','jpeg','change');input('export-background','#17314c');input('watermark-enabled',true,'change');input('watermark-text','FILTER CHECK');input('watermark-position','center','change');input('watermark-color','#ff00bb');input('watermark-opacity',100);input('watermark-size',12);
+        await until(()=>!el('export-preview-canvas').hidden&&!/正在/.test(el('export-preview-status').textContent),'带水印 JPG 预览');await sleep(220);const marked=snapshot(el('export-preview-canvas'));
+        assert(point(marked,0,0)[3]===255,'JPG 透明背景未填充');assert(point(marked,0,0).slice(0,3).every((v,i)=>Math.abs(v-[23,49,76][i])<=4),'JPG 未使用指定背景');
+        const jpeg=await adapter.handle('export',{mode:'composite',adjustments:adj,format:'jpeg',quality:.92,background:'#17314c',watermark:{enabled:true,text:'FILTER CHECK',position:'center',color:'#ff00bb',opacity:1,size:12}}),encoded=capture(await createImageBitmap(jpeg.blob),'滤镜与水印 JPG 导出',true);
+        const plain=await adapter.handle('export',{mode:'composite',adjustments:adj,format:'jpeg',quality:.92,background:'#17314c'}),unmarked=capture(await createImageBitmap(plain.blob));
+        assert(jpeg.blob.type==='image/jpeg'&&differences(encoded,unmarked,8).changed>50,'JPG 水印没有出现');
+        const got=point(encoded,58,148),wanted=point(expected,58,148);assert(got.slice(0,3).every((v,i)=>Math.abs(v-wanted[i])<8),'JPG 导出丢失滤镜效果');
+        el('export-cancel').click();await committed();same(snapshot(),expected,'水印导出污染了主画布');return{jpegBytes:jpeg.blob.size};
+      });
+      await check('快速连续拖动后提交最终参数，等待后无旧帧覆盖',async()=>{
+        if(el('export-dialog').open)el('export-cancel').click();await activate(imageA);await reset();
+        for(let i=0;i<28;i++){input('adjust-brightness',i-14);input('adjust-contrast',(i*3)%50);input('adjust-temperature',30-i);input('adjust-sharpness',i*2);}
+        const final={brightness:23,contrast:17,saturation:31,temperature:-24,sharpness:55,strength:72};for(const [key,value]of Object.entries(final))input(`adjust-${key}`,value);
+        const expected=await directRender(final);await until(()=>idle()&&canvas().width===expected.width&&differences(snapshot(),expected,2).changed===0,'最终参数画面匹配');await sleep(320);
+        assert(keys.every(k=>settings()[k]===final[k]),'界面滑块没有保留最终值');same(snapshot(),expected,'迟到旧帧覆盖了最终调整',2);return{settings:settings()};
+      });
+      await check('计算中关闭标签不提交迟到画面，全部关闭后无残留 busy 状态',async()=>{
+        await activate(imageB);const expectedB=snapshot(),paramsB=settings();await activate(imageA);
+        input('adjust-sharpness',100);input('adjust-brightness',70);tab(imageA).querySelector('.document-tab-close').click();
+        await until(()=>!tab(imageA)&&activeId()===imageB,'关闭当前图片后返回邻居');await committed();await sleep(260);same(snapshot(),expectedB,'已关闭图片的迟到结果覆盖邻居',2);assert(keys.every(k=>settings()[k]===paramsB[k]),'邻居参数被已关闭图片污染');
+        input('adjust-sharpness',100);tab(imageB).querySelector('.document-tab-close').click();await until(()=>tabs().length===0&&canvas().hidden&&!el('empty-state').hidden,'全部关闭空状态');await sleep(260);
+        assert(el('canvas-viewport').getAttribute('aria-busy')==='false'&&el('loading-overlay').hidden&&canvas().hidden,'全部关闭后仍有画布或 busy');
+        const pendingRender=adapter.handle('render',{mode:'composite',maxSize:320,adjustments:{brightness:20,sharpness:100}});adapter.dispose();let closedError;try{const r=await pendingRender;r.bitmap?.close();}catch(e){closedError=e.message;}assert(closedError?.includes('关闭'),'关闭后的适配器仍提交迟到渲染');
+        return{remainingTabs:tabs().length,disposedError:closedError};
+      });
+    }catch(error){await check('图片滤镜验收流程异常',()=>{throw error;});}
+    finally{busy=false;update();}
+  }
+  $('run').onclick=run;run();
+})();
+</script>
+</html>

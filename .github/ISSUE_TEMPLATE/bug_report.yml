@@ -1,0 +1,29 @@
+name: 问题报告 / Bug report
+description: 报告文件读取、预览、滤镜或导出问题。
+body:
+  - type: input
+    id: browser
+    attributes:
+      label: 浏览器与系统 / Browser and OS
+      placeholder: Chrome 版本、Windows 或 macOS 版本
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: 文件格式 / File format
+      placeholder: PSD、PSB、SVG、PNG、JPG…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤和完整报错 / Steps and exact error
+      description: 请说明预期与实际结果，以及使用独立 HTML 还是本机预览服务。
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: 可公开的最小样例 / Public minimal sample
+      description: 请勿上传保密文件、客户文稿或没有传播授权的素材。无可公开样例时可填写“暂缺”。

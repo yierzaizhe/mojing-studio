@@ -1,0 +1,217 @@
+{
+  "width": 120,
+  "height": 96,
+  "layerNodes": 19,
+  "probes": [
+    {
+      "at": [
+        12,
+        12
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        128
+      ],
+      "why": "pixel alpha 50% stays 50%",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        52,
+        12
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        64
+      ],
+      "why": "pixel alpha 50% times base layer opacity 50%",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        92,
+        12
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        128
+      ],
+      "why": "opaque base times base layer opacity 50%",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        12,
+        44
+      ],
+      "rgba": [
+        127,
+        0,
+        128,
+        128
+      ],
+      "why": "clip opacity mixes RGB but preserves base alpha",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        52,
+        44
+      ],
+      "rgba": [
+        0,
+        0,
+        0,
+        128
+      ],
+      "why": "multiply clip preserves base alpha",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        92,
+        44
+      ],
+      "rgba": [
+        255,
+        0,
+        255,
+        128
+      ],
+      "why": "screen clip preserves base alpha",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        2,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "why": "antialiased edge alpha 0",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        6,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        1
+      ],
+      "why": "antialiased edge alpha 1",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        10,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        64
+      ],
+      "why": "antialiased edge alpha 64",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        14,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        128
+      ],
+      "why": "antialiased edge alpha 128",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        18,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        192
+      ],
+      "why": "antialiased edge alpha 192",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        22,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        254
+      ],
+      "why": "antialiased edge alpha 254",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        26,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "why": "antialiased edge alpha 255",
+      "tolerance": 1
+    },
+    {
+      "at": [
+        52,
+        76
+      ],
+      "rgba": [
+        0,
+        0,
+        0,
+        64
+      ],
+      "why": "multiply clip plus base layer opacity",
+      "tolerance": 2
+    },
+    {
+      "at": [
+        92,
+        76
+      ],
+      "rgba": [
+        63,
+        64,
+        128,
+        128
+      ],
+      "why": "stacked clipping layers share a single shape alpha",
+      "tolerance": 2
+    }
+  ]
+}

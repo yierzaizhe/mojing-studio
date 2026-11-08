@@ -1,0 +1,127 @@
+{
+  "demo": {
+    "width": 1000,
+    "height": 750,
+    "layerNodes": 22,
+    "bytes": 852305
+  },
+  "compositing": {
+    "width": 128,
+    "height": 96,
+    "layerNodes": 13,
+    "tolerance": 3,
+    "probes": [
+      {
+        "at": [
+          12,
+          12
+        ],
+        "rgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "why": "Hidden layer must not cover the red layer."
+      },
+      {
+        "at": [
+          52,
+          12
+        ],
+        "rgba": [
+          128,
+          128,
+          255,
+          255
+        ],
+        "why": "Isolated group opacity is applied after child composition."
+      },
+      {
+        "at": [
+          64,
+          20
+        ],
+        "rgba": [
+          128,
+          255,
+          128,
+          255
+        ],
+        "why": "Overlapping children must not receive group opacity twice."
+      },
+      {
+        "at": [
+          8,
+          56
+        ],
+        "rgba": [
+          255,
+          0,
+          255,
+          255
+        ],
+        "why": "White mask preserves layer pixels."
+      },
+      {
+        "at": [
+          28,
+          56
+        ],
+        "rgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "why": "Black mask removes layer pixels."
+      },
+      {
+        "at": [
+          60,
+          60
+        ],
+        "rgba": [
+          255,
+          128,
+          0,
+          255
+        ],
+        "why": "Clipped orange covers the opaque circle."
+      },
+      {
+        "at": [
+          46,
+          46
+        ],
+        "rgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "why": "Clipped pixels outside the base remain transparent."
+      },
+      {
+        "at": [
+          100,
+          8
+        ],
+        "rgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "why": "Magenta multiplied by yellow produces red."
+      }
+    ],
+    "structure": [
+      "hidden blue square is present and hidden",
+      "empty group is present without pixels",
+      "brightness adjustment is present without pixels",
+      "magenta with left half mask has mask",
+      "clipped orange has clipping=true"
+    ]
+  }
+}

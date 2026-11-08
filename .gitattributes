@@ -1,0 +1,12 @@
+* text=auto
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.psd binary
+*.png binary
+*.jpg binary
+*.wasm binary
+vendor/** linguist-vendored -whitespace

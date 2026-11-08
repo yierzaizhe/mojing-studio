@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LayerDesk · 浏览器验收</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#17191d;color:#dce1e8;font:14px/1.65 system-ui,-apple-system,sans-serif}main{max-width:1100px;margin:auto;padding:30px}h1{font-size:24px;margin:0 0 6px}p{color:#9aa4b5;margin:0 0 20px}button{background:#2b3342;color:#e5ecf8;border:1px solid #46536a;border-radius:5px;padding:8px 14px;margin:0 8px 8px 0;cursor:pointer}button:hover{background:#3b4961}button:disabled{opacity:.4;cursor:wait}#summary{padding:14px 16px;background:#252a34;border:1px solid #3d485a;border-radius:6px;margin:12px 0;font-weight:600}.pass{color:#80ddb0}.fail{color:#ff8b8b}.running{color:#8dbbff}li{padding:6px 10px;border-bottom:1px solid #303641}ol{padding-left:26px}canvas{max-width:100%;height:auto;max-height:320px;border:1px solid #46536a;margin:12px 0;background:repeating-conic-gradient(#fff 0 25%,#ddd 0 50%) 50%/16px 16px}pre{font:12px/1.6 ui-monospace,monospace;padding:18px;background:#101216;border:1px solid #303641;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:5px}a{color:#8dbbff}
+</style>
+<main>
+  <h1>LayerDesk 浏览器验收</h1>
+  <p>直接复用交付 HTML 内的解析 Worker，验证真实 PSD 读取、像素合成和 PNG 导出。仅此验收页通过本地服务读取测试文件。</p>
+  <div><button id="run">重新运行核心验收</button><a href="../index.html">返回工具</a></div>
+  <div id="summary" aria-live="polite">准备验收…</div>
+  <ol id="checks"></ol>
+  <div id="previews"></div>
+  <pre id="result">{}</pre>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let source, embeddedDemo, expected, worker, workerUrl, counter = 0, busy = false;
+  const pending = new Map();
+  const results = [];
+  const flatten = nodes => (nodes || []).flatMap(n => [n, ...flatten(n.children)]);
+  function assert(value, message) { if (!value) throw new Error(message); }
+  function update() {
+    window.__qaResult = { done: !busy, passed: results.filter(r => r.pass).length, failed: results.filter(r => !r.pass).length, checks: results };
+    $('result').textContent = JSON.stringify(window.__qaResult, null, 2);
+    const r = window.__qaResult;
+    $('summary').textContent = `${busy ? '运行中' : '验收结束'} · ${r.passed} 项通过 · ${r.failed} 项失败`;
+    $('summary').className = r.failed ? 'fail' : busy ? 'running' : 'pass';
+  }
+  async function check(name, fn) {
+    const li = document.createElement('li'); li.className = 'running'; li.textContent = `运行 · ${name}`; $('checks').append(li);
+    const started = performance.now();
+    try {
+      const detail = await fn();
+      results.push({ name, pass: true, ms: Math.round(performance.now() - started), ...(detail === undefined ? {} : { detail }) });
+      li.className = 'pass'; li.textContent = `PASS · ${name}`;
+    } catch (e) {
+      results.push({ name, pass: false, ms: Math.round(performance.now() - started), error: e.message });
+      li.className = 'fail'; li.textContent = `FAIL · ${name} · ${e.message}`;
+    }
+    update();
+  }
+  async function bootstrap() {
+    if (source) return;
+    const response = await fetch('../index.html'); assert(response.ok, '交付 HTML 不存在，请先 node build.mjs');
+    const dom = new DOMParser().parseFromString(await response.text(), 'text/html');
+    source = dom.getElementById('psd-worker-source')?.textContent;
+    embeddedDemo = dom.getElementById('demo-psd-data')?.textContent.trim();
+    assert(source?.includes('agPsd'), '没有找到内置 PSD Worker');
+    assert(embeddedDemo, '没有找到内置 PSD 示例');
+    expected = await (await fetch('expected.json')).json();
+  }
+  function freshWorker() {
+    if (worker) worker.terminate();
+    if (workerUrl) URL.revokeObjectURL(workerUrl);
+    for (const p of pending.values()) { clearTimeout(p.timeout); p.reject(new Error('Worker 重置')); } pending.clear();
+    workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' })); worker = new Worker(workerUrl);
+    worker.onmessage = e => {
+      const r = e.data, p = pending.get(r.id); if (!p) { r.bitmap?.close(); return; }
+      pending.delete(r.id); clearTimeout(p.timeout); r.ok ? p.resolve(r) : p.reject(new Error(r.error || 'Worker 请求失败'));
+    };
+    worker.onerror = e => { for (const p of pending.values()) { clearTimeout(p.timeout); p.reject(new Error(e.message)); } pending.clear(); };
+  }
+  function request(type, args = {}) {
+    return new Promise((resolve, reject) => {
+      const id = ++counter;
+      const timeout = setTimeout(() => { pending.delete(id); reject(new Error(`${type} 超过 120 秒`)); }, 120000);
+      pending.set(id, { resolve, reject, timeout }); worker.postMessage({ id, type, ...args });
+    });
+  }
+  function fileFromBase64(data, name) {
+    const binary = atob(data), b = new Uint8Array(binary.length);
+    for (let i = 0; i < b.length; i++) b[i] = binary.charCodeAt(i);
+    return new File([b], name, { type: 'image/vnd.adobe.photoshop' });
+  }
+  async function fetchFile(url, name) { const r = await fetch(url); assert(r.ok, `${url} HTTP ${r.status}`); return new File([await r.blob()], name); }
+  function capture(bitmap, label, show = false) {
+    assert(bitmap instanceof ImageBitmap, '没有返回可显示的 ImageBitmap');
+    const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0); bitmap.close();
+    if (show) { canvas.title = label; $('previews').append(canvas); }
+    return canvas;
+  }
+  function pixel(canvas, x, y) { return [...canvas.getContext('2d').getImageData(x, y, 1, 1).data]; }
+  function closeEnough(actual, wanted, tolerance) { return actual.every((v, i) => Math.abs(v - wanted[i]) <= tolerance); }
+  function lock(value) { busy = value; document.querySelectorAll('button').forEach(b => b.disabled = value); update(); }
+
+  async function core() {
+    if (busy) return;
+    results.length = 0; $('checks').replaceChildren(); $('previews').replaceChildren(); lock(true);
+    try {
+      await check('离线交付物含解析库、Worker 和真实 PSD 示例', bootstrap);
+      if (!source || !expected) return;
+      freshWorker();
+      let doc, original, composed, nodes;
+      await check('内置示例：22 个节点、1000×750、中文文字与隐藏组', async () => {
+        const r = await request('open', { file: fileFromBase64(embeddedDemo, '设计示例.psd') }); doc = r.doc; nodes = flatten(doc.children);
+        assert(doc.width === 1000 && doc.height === 750, '示例画布尺寸不符');
+        assert(doc.count === expected.demo.layerNodes, `图层计数 ${doc.count}，预期 ${expected.demo.layerNodes}`);
+        assert(nodes.some(n => n.type === 'text' && n.text?.includes('一点灵感')), '中文文字属性丢失');
+        assert(nodes.some(n => n.type === 'group' && n.hidden), '隐藏组丢失');
+        return { width: doc.width, height: doc.height, count: doc.count, warnings: doc.warnings };
+      });
+      if (doc) {
+        const hiddenIds = nodes.filter(n => n.hidden).map(n => n.id);
+        await check('示例原始合成图可解码显示', async () => {
+          const r = await request('render', { mode: 'original', maxSize: 1000 }); original = capture(r.bitmap, '示例原始合成图', true);
+          assert(original.width === 1000 && original.height === 750, `预览尺寸异常 ${original.width}×${original.height}`);
+          assert(pixel(original, 660, 130)[2] > 200, '蓝色色块未正确显示');
+          return { source: r.source, warnings: r.warnings };
+        });
+        await check('示例按图层合成：标题、色块和图像位置一致', async () => {
+          const r = await request('render', { mode: 'composite', hiddenIds, maxSize: 1000 }); composed = capture(r.bitmap, '示例逐层合成', true);
+          assert(composed.width === 1000 && composed.height === 750, '合成尺寸错误');
+          if (original) for (const [x, y] of [[80, 100], [660, 130], [650, 380], [800, 590], [300, 620]]) {
+            const a = pixel(composed, x, y), b = pixel(original, x, y);
+            assert(closeEnough(a, b, 3), `(${x},${y}) 合成 ${a} 与原始 ${b} 不符`);
+          }
+          return { warnings: r.warnings };
+        });
+        const target = nodes.find(n => n.type === 'text' && n.text?.includes('一点灵感'));
+        await check('文字图层可单独预览，位置与边界保留', async () => {
+          assert(target, '没有测试目标文字层');
+          const r = await request('render', { mode: 'layer', layerId: target.id, maxSize: 1000 });
+          const c = capture(r.bitmap, '单独文字层'); assert(c.width > 100 && c.height > 10, '文字层为空');
+          assert(r.source === 'layer', '单层请求返回了错误预览模式');
+          return { pixelWidth: c.width, pixelHeight: c.height, originX: r.originX, originY: r.originY };
+        });
+        await check('图层缩略图可按需解码', async () => {
+          const r = await request('thumbnail', { layerId: target.id });
+          const c = capture(r.bitmap, '文字缩略图'); assert(c.width <= 64 && c.height <= 64, '缩略图未缩小');
+          return { width: c.width, height: c.height };
+        });
+        await check('单层 PNG 导出是真实可解码透明图片', async () => {
+          const r = await request('export', { mode: 'layer', layerId: target.id });
+          assert(r.blob instanceof Blob && r.blob.type === 'image/png', '未返回 PNG Blob');
+          const c = capture(await createImageBitmap(r.blob), '导出文字 PNG');
+          assert(c.width === target.width && c.height === target.height, 'PNG 不是图层原始尺寸');
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          let opaque = 0, transparent = 0; for (let i = 3; i < d.length; i += 4) { if (d[i] > 200) opaque++; if (d[i] === 0) transparent++; }
+          assert(opaque > 50 && transparent > 50, 'PNG 未保留文字与透明背景');
+          return { bytes: r.blob.size, width: c.width, height: c.height };
+        });
+      }
+      let fixture, fixtureNodes, fixtureImage;
+      await check('分析 PSD：隐藏层、蒙版、剪贴与无像素节点完整读取', async () => {
+        const r = await request('open', { file: await fetchFile('compositing.psd', 'compositing.psd') }); fixture = r.doc; fixtureNodes = flatten(fixture.children);
+        assert(fixture.count === expected.compositing.layerNodes, `图层计数 ${fixture.count} 错误`);
+        assert(fixtureNodes.some(n => n.type === 'adjustment' && !n.hasPixels), '无像素调整图层缺失');
+        assert(fixtureNodes.some(n => n.type === 'group' && n.children?.length === 0), '空组缺失');
+        assert(fixtureNodes.some(n => n.hasMask), '蒙版标记缺失');
+        assert(fixtureNodes.some(n => n.clipping), '剪贴标记缺失');
+        return { count: fixture.count, warnings: fixture.warnings };
+      });
+      if (fixture) {
+        const hiddenIds = fixtureNodes.filter(n => n.hidden).map(n => n.id);
+        await check('分析 PSD 按图层合成可返回像素', async () => {
+          const r = await request('render', { mode: 'composite', hiddenIds, maxSize: 128 }); fixtureImage = capture(r.bitmap, '分析 PSD 合成', true);
+          assert(fixtureImage.width === 128 && fixtureImage.height === 96, '合成尺寸错误');
+          return { warnings: r.warnings };
+        });
+        if (fixtureImage) for (const probe of expected.compositing.probes) await check(`像素探针 (${probe.at}) · ${probe.why}`, () => {
+          const actual = pixel(fixtureImage, ...probe.at); assert(closeEnough(actual, probe.rgba, expected.compositing.tolerance), `得到 ${actual}，预期 ${probe.rgba}`); return actual;
+        });
+        await check('隐藏红色层后重新合成，原位置恢复白色', async () => {
+          const red = fixtureNodes.find(n => n.name === 'red square');
+          const r = await request('render', { mode: 'composite', hiddenIds: [...hiddenIds, red.id], maxSize: 128 }); const c = capture(r.bitmap, '隐藏测试');
+          assert(closeEnough(pixel(c, 12, 12), [255, 255, 255, 255], 1), '隐藏操作没有重新合成');
+        });
+        await check('显示原本隐藏的蓝色层，覆盖红色层', async () => {
+          const r = await request('render', { mode: 'composite', hiddenIds: [], maxSize: 128 }); const c = capture(r.bitmap, '显示测试');
+          assert(closeEnough(pixel(c, 12, 12), [0, 0, 255, 255], 1), '无法显示初始隐藏层');
+        });
+        await check('整图 PNG 导出保留原始画布尺寸及合成像素', async () => {
+          const r = await request('export', { mode: 'composite', hiddenIds }); const c = capture(await createImageBitmap(r.blob), '分析 PSD 导出 PNG');
+          assert(c.width === 128 && c.height === 96, 'PNG 尺寸错误');
+          assert(closeEnough(pixel(c, 100, 8), [255, 0, 0, 255], 1), 'PNG 正片叠底像素错误');
+          return { bytes: r.blob.size, width: c.width, height: c.height };
+        });
+      }
+      await check('半透明剪贴链：15 个预览及 PNG 像素探针保持正确 alpha', async () => {
+        const alphaExpected=await (await fetch('clip-alpha.expected.json')).json();
+        const opened=await request('open',{file:await fetchFile('clip-alpha.psd','clip-alpha.psd')});
+        assert(opened.doc.count===alphaExpected.layerNodes,'剪贴测试图层丢失');
+        const rendered=await request('render',{mode:'composite',maxSize:120});
+        const preview=capture(rendered.bitmap,'半透明剪贴链',true);
+        const exported=await request('export',{mode:'composite'});
+        const png=capture(await createImageBitmap(exported.blob),'半透明PNG');
+        for(const probe of alphaExpected.probes)for(const image of [preview,png]){
+          const actual=pixel(image,...probe.at);
+          assert(closeEnough(actual,probe.rgba,probe.tolerance),`${probe.why}: ${actual}, 预期${probe.rgba}`);
+        }
+        return {previewProbes:alphaExpected.probes.length,pngProbes:alphaExpected.probes.length};
+      });
+      await check('画布选层：29 个实际像素命中探针',async()=>{
+        const cases=(await (await fetch('hit-test.expected.json')).json()).cases;
+        let current,all;const probes=[];
+        for(const probe of cases){
+          if(current!==probe.file){
+            const file=probe.file==='demo'?fileFromBase64(embeddedDemo,'demo.psd'):await fetchFile(`${probe.file}.psd`,`${probe.file}.psd`);
+            const opened=await request('open',{file});all=flatten(opened.doc.children);current=probe.file;
+          }
+          const scope=probe.scope&&all.find(n=>n.name===probe.scope);
+          const hiddenIds=probe.hiddenNames?.map(name=>all.find(n=>n.name===name)?.id);
+          const r=await request('hitTest',{x:probe.at[0],y:probe.at[1],mode:scope?'layer':'original',layerId:scope?.id,...(hiddenIds?{hiddenIds}:{})});
+          const actual=all.find(n=>n.id===r.layerId)?.name||null;
+          assert(actual===probe.expected,`${probe.why}: 得到 ${actual}，预期 ${probe.expected}`);
+          if(probe.candidates)assert(JSON.stringify(r.candidates.map(n=>n.name))===JSON.stringify(probe.candidates),`${probe.why}: 重叠顺序错误`);
+          probes.push({why:probe.why,selected:actual});
+        }
+        const title=all.find(n=>n.name==='主标题 · FORM & FEEL');
+        const rendered=await request('render',{mode:'layer',layerId:title.id,maxSize:2000});
+        const glyph=capture(rendered.bitmap,'文字命中探针'),data=glyph.getContext('2d').getImageData(0,0,glyph.width,glyph.height).data;
+        let opaque,transparent;
+        for(let y=10;y<glyph.height-10&&(!opaque||!transparent);y++)for(let x=10;x<glyph.width-10;x++){
+          const alpha=data[(y*glyph.width+x)*4+3];
+          if(alpha===255&&!opaque)opaque=[title.left+x,title.top+y];
+          if(alpha===0&&!transparent)transparent=[title.left+x,title.top+y];
+        }
+        assert(opaque&&transparent,'无法找到字形和字间空白');
+        const filled=await request('hitTest',{x:opaque[0],y:opaque[1],mode:'original'});
+        assert(filled.layerId===title.id,'点击字形未选中文字层');
+        const hole=await request('hitTest',{x:transparent[0],y:transparent[1],mode:'original'});
+        assert(hole.layerId!==title.id,'字间透明区域误选文字层');
+        return {hitProbes:cases.length+2,probes,glyph:opaque,whitespace:transparent};
+      });
+      await check('空文件返回可读错误',async()=>{
+        let message;try{await request('open',{file:new File([],'empty.psd')});}catch(error){message=error.message;}
+        assert(message&&message.includes('PSD'),'空文件未返回明确错误');return message;
+      });
+      await check('损坏文件返回可读错误，Worker 不静默卡住', async () => {
+        let message;
+        try { await request('open', { file: await fetchFile('invalid.psd', 'invalid.psd') }); } catch (e) { message = e.message; }
+        assert(message && !message.includes('超过 120 秒'), '没有及时返回错误'); return message;
+      });
+    } finally { lock(false); }
+  }
+  $('run').onclick = () => core().catch(e => { $('summary').textContent = `验收页异常：${e.message}`; });
+  core().catch(e => { $('summary').textContent = `验收页异常：${e.message}`; lock(false); });
+})();
+</script>
+</html>

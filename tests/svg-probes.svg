@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="96" viewBox="10 20 64 48">
+<defs>
+ <clipPath id="circle-clip"><ellipse cx="42" cy="56" rx="6" ry="6"/></clipPath>
+ <mask id="half-mask" maskUnits="userSpaceOnUse" x="54" y="48" width="16" height="16"><rect x="54" y="48" width="8" height="16" fill="white"/><rect x="62" y="48" width="8" height="16" fill="black"/></mask>
+ <style>.initially-hidden{display:none}</style>
+</defs>
+<rect id="background" x="10" y="20" width="64" height="48" fill="white"/>
+<g id="red-group"><rect id="red" x="14" y="24" width="16" height="16" fill="red"/></g>
+<g id="rotated-group" transform="translate(42 24) rotate(90)"><rect id="rotated-green" width="12" height="8" fill="#00c000"/></g>
+<circle id="stroke-circle" cx="60" cy="30" r="7" fill="none" stroke="blue" stroke-width="2"/>
+<path id="ring" d="M14 48h16v16H14zM18 52h8v8h-8z" fill="black" fill-rule="evenodd"/>
+<rect id="clipped-magenta" x="36" y="48" width="20" height="16" fill="magenta" clip-path="url(#circle-clip)"/>
+<rect id="masked-yellow" x="54" y="48" width="16" height="16" fill="yellow" mask="url(#half-mask)"/>
+<rect id="hidden-blue" class="initially-hidden" x="14" y="24" width="16" height="16" fill="blue"/>
+</svg>

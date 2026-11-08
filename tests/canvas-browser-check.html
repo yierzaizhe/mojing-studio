@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LayerDesk · 画布与加载验收</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#17191d;color:#dce1e8;font:14px/1.6 system-ui,sans-serif}main{max-width:1440px;margin:auto;padding:24px}h1{font-size:24px;margin:0 0 8px}p{color:#a5afbd;margin:8px 0 14px}button{padding:8px 14px;background:#2b3342;color:#e5ecf8;border:1px solid #46536a;border-radius:4px;cursor:pointer}button:disabled{opacity:.5}a{color:#8dbbff}#summary{padding:12px 14px;background:#252a34;border:1px solid #3d485a;margin:16px 0}.pass{color:#80ddb0}.fail{color:#ff8b8b}.running{color:#8dbbff}li{padding:3px 0}iframe{display:block;width:100%;height:760px;border:1px solid #535a66;background:#292929}pre{font:12px/1.5 ui-monospace,monospace;padding:16px;background:#101216;white-space:pre-wrap;overflow-wrap:anywhere}.note{font-size:12px}
+</style>
+<main>
+  <h1>画布与加载验收</h1>
+  <p>运行交付 HTML 的真实界面与解析器。仅将原生 Worker 的 open / render 请求延迟 300 毫秒，以观察加载阶段；文件、渲染结果及事件处理均使用应用本身。</p>
+  <button id="run">重新运行</button> <a href="../index.html">返回工具</a>
+  <div id="summary">准备验收…</div><ol id="checks"></ol>
+  <p class="note">最后保留透明 PNG 的画布，供检查灰色工作区与画布内的透明网格。拖动画布由人工真实指针检查。</p>
+  <iframe id="preview" title="LayerDesk 真实画布预览"></iframe>
+  <pre id="result">{}</pre>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id), records=[];
+  const assert=(value,message)=>{if(!value)throw new Error(message);};
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  let busy=false, doc, win, initialOpen, pngFile, demoBytes, demoSequence=0;
+  const el=id=>doc.getElementById(id), canvas=()=>el('stage-canvas'), paper=()=>el('canvas-paper'), viewport=()=>el('canvas-viewport');
+  function update(){
+    const result={done:!busy,passed:records.filter(r=>r.pass).length,failed:records.filter(r=>!r.pass).length,checks:records};
+    $('result').textContent=JSON.stringify(result,null,2);
+    $('summary').textContent=`${busy?'运行中':'验收结束'} · ${result.passed} 项通过 · ${result.failed} 项失败`;
+    $('summary').className=result.failed?'fail':busy?'running':'pass';$('run').disabled=busy;
+  }
+  async function check(name,fn){
+    const li=document.createElement('li'),start=performance.now();li.className='running';li.textContent=`运行 · ${name}`;$('checks').append(li);
+    try{const detail=await fn();records.push({name,pass:true,ms:Math.round(performance.now()-start),...(detail===undefined?{}:{detail})});li.className='pass';li.textContent=`PASS · ${name}`;}
+    catch(error){records.push({name,pass:false,ms:Math.round(performance.now()-start),error:error.message});li.className='fail';li.textContent=`FAIL · ${name} · ${error.message}`;}
+    update();
+  }
+  async function until(predicate,message,timeout=12000){
+    const start=performance.now();
+    while(performance.now()-start<timeout){const value=predicate();if(value)return value;await sleep(16);}
+    throw new Error(`等待超时：${message}`);
+  }
+  const settle=()=>new Promise(resolve=>win.requestAnimationFrame(()=>win.requestAnimationFrame(resolve)));
+  function change(id,value){const select=el(id);assert(select?.querySelector(`option[value="${value}"]`),`${id} 缺少 ${value} 选项`);select.value=value;select.dispatchEvent(new win.Event('change',{bubbles:true}));}
+  function phase(){return el('loading-overlay').querySelector('.loading-card').dataset.phase;}
+  function idle(){return viewport().getAttribute('aria-busy')==='false'&&el('loading-overlay').hidden&&el('canvas-render-status').hidden;}
+  async function committed(){await until(()=>!canvas().hidden&&canvas().width>1&&!paper().hidden&&idle(),'提交预览并结束 busy');await settle();}
+  function snapshot(){const c=canvas();return{width:c.width,height:c.height,pixels:c.getContext('2d').getImageData(0,0,c.width,c.height).data};}
+  function unchanged(before,message){
+    const c=canvas();assert(c.width===before.width&&c.height===before.height,`${message}（尺寸已改变）`);
+    const after=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    assert(after.length===before.pixels.length,`${message}（数据长度）`);
+    for(let i=0;i<after.length;i++)if(after[i]!==before.pixels[i])throw new Error(`${message}（第 ${i} 字节）`);
+  }
+  function rect(element){const r=element.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height};}
+  function aligned(){
+    const a=rect(canvas()),b=rect(paper());
+    for(const key of ['x','y','width','height'])assert(Math.abs(a[key]-b[key])<.75,`纸张与画布 ${key} 不一致：${a[key]} / ${b[key]}`);
+    assert(a.width>0&&a.height>0,'画布没有可见尺寸');return a;
+  }
+  const pixel=(x,y)=>[...canvas().getContext('2d').getImageData(x,y,1,1).data];
+  const tabs=()=>[...doc.querySelectorAll('#document-tabs .document-tab-item')];
+  const activeTab=()=>doc.querySelector('#document-tabs .document-tab-item.active');
+  const tabById=id=>tabs().find(tab=>tab.dataset.documentId===id);
+  function latestRequest(type,after=0){return win.__canvasBrowserCheck.requests.filter(r=>r.type===type&&r.queuedAt>=after).at(-1);}
+  async function openDemo(label='画布读取'){
+    const since=win.performance.now();assert(!el('demo-btn').disabled,'示例按钮没有恢复');
+    const file=new win.File([demoBytes],`${label} ${++demoSequence} · 示例.psd`,{type:'image/vnd.adobe.photoshop',lastModified:0});
+    importFile(file);
+    return until(()=>latestRequest('open',since),'示例真实 open 请求');
+  }
+  function importFile(file){const transfer=new win.DataTransfer();transfer.items.add(file);el('file-input').files=transfer.files;el('file-input').dispatchEvent(new win.Event('change',{bubbles:true}));}
+  async function makeTransparentPng(){
+    const source=document.createElement('canvas');source.width=240;source.height=180;
+    const context=source.getContext('2d');context.fillStyle='#2a83bd';context.fillRect(48,36,144,108);context.fillStyle='rgba(244,154,61,.5)';context.fillRect(16,128,40,32);
+    const blob=await new Promise((resolve,reject)=>source.toBlob(b=>b?resolve(b):reject(new Error('无法创建 PNG')),'image/png'));
+    return new win.File([blob],'透明画布验收.png',{type:'image/png'});
+  }
+  async function initialize(){
+    const response=await fetch('../index.html',{cache:'no-store'});assert(response.ok,'请先构建并通过本地服务器打开验收页');let source=await response.text();
+    assert(source.includes('id="canvas-paper"')&&source.includes('id="loading-step-read"'),'交付 HTML 尚未包含本次画布改进，请先构建');
+    // The native parser and renderer are untouched. Delay only delivery of genuine requests.
+    const instrumentation=`(() => {
+      const NativeWorker=window.Worker;
+      window.__canvasBrowserCheck={delayMs:300,requests:[],forwardErrors:[]};
+      window.Worker=class extends NativeWorker {
+        constructor(...args){super(...args);this.canvasTestTimers=new Set();this.canvasTestStopped=false;}
+        postMessage(message,transfer){
+          const record={type:message?.type,id:message?.id,filename:message?.file?.name,queuedAt:performance.now(),forwardedAt:null};
+          window.__canvasBrowserCheck.requests.push(record);
+          const forward=()=>{if(this.canvasTestStopped)return;record.forwardedAt=performance.now();try{super.postMessage(message,transfer);}catch(error){window.__canvasBrowserCheck.forwardErrors.push(error.message);throw error;}};
+          if(message?.type==='open'||message?.type==='render'){
+            const timer=setTimeout(()=>{this.canvasTestTimers.delete(timer);forward();},300);this.canvasTestTimers.add(timer);
+          }else forward();
+        }
+        terminate(){this.canvasTestStopped=true;for(const timer of this.canvasTestTimers)clearTimeout(timer);this.canvasTestTimers.clear();super.terminate();}
+      };
+    })();`;
+    source=source.replace(/<head\b[^>]*>/i,match=>`${match}<script>${instrumentation}<`+'/script>');
+    localStorage.removeItem('layerdesk.canvas.v1');
+    const iframe=$('preview'),loaded=new Promise(resolve=>iframe.addEventListener('load',resolve,{once:true}));iframe.srcdoc=source;await loaded;
+    win=iframe.contentWindow;doc=iframe.contentDocument;
+    await until(()=>el('demo-btn')?.onclick&&win.__canvasBrowserCheck,'应用真实事件绑定');
+    for(const id of ['canvas-paper','stage-canvas','canvas-viewport','loading-overlay','loading-filename','loading-detail','loading-step-read','loading-step-render','canvas-render-status','canvas-background-select','checker-size-select'])assert(el(id),`缺少 ${id}`);
+    const raw=win.atob(el('demo-psd-data').textContent.trim());demoBytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)demoBytes[i]=raw.charCodeAt(i);demoSequence=0;
+    pngFile=await makeTransparentPng();
+  }
+  async function run(){
+    if(busy)return;busy=true;records.length=0;$('checks').replaceChildren();update();
+    try{
+      await initialize();
+      await check('初次读取前 160 ms 不闪遮罩，随后显示真实读取阶段',async()=>{
+        initialOpen=await openDemo();
+        await sleep(55);const elapsed=win.performance.now()-initialOpen.queuedAt;
+        assert(elapsed<160,`浏览器调度已超过早期观察窗口：${Math.round(elapsed)} ms`);
+        assert(el('loading-overlay').hidden,'160 ms 前显示了加载卡');
+        assert(viewport().getAttribute('aria-busy')==='true','读取时缺少 aria-busy=true');
+        await until(()=>!el('loading-overlay').hidden,'160 ms 后的读取卡');
+        assert(phase()==='read','读取期间 phase 不是 read');
+        assert(el('loading-step-read').dataset.state==='active'&&el('loading-step-render').dataset.state==='waiting','读取步骤状态错误');
+        assert(el('loading-filename').textContent.includes('示例.psd'),'加载卡未显示真实文件名');
+        assert(el('loading-detail').textContent.trim(),'加载卡缺少阶段说明');
+        return{earlyObservationMs:Math.round(elapsed),phase:phase(),filename:el('loading-filename').textContent};
+      });
+      await check('读取完成后切到生成预览，首帧提交才结束 busy',async()=>{
+        await until(()=>!el('loading-overlay').hidden&&phase()==='render','生成预览阶段');
+        assert(el('loading-step-read').dataset.state==='done'&&el('loading-step-render').dataset.state==='active','生成预览步骤状态错误');
+        assert(viewport().getAttribute('aria-busy')==='true','首帧提交前已结束 busy');
+        const request=latestRequest('render',initialOpen?.queuedAt||0);assert(request,'未向真实 Worker 请求预览');
+        await committed();
+        assert(win.__canvasBrowserCheck.forwardErrors.length===0,'Worker 请求转发异常');
+        return{width:canvas().width,height:canvas().height,busy:viewport().getAttribute('aria-busy')};
+      });
+      await check('纸张与画布尺寸位置一致，实际大小和适应窗口保持对齐',async()=>{
+        await committed();const fitted=aligned();el('actual-btn').click();await settle();const actual=aligned();el('fit-btn').click();await settle();aligned();
+        return{fitted,actual};
+      });
+      await check('选层和连续切模式保留旧帧，最新一次重绘完成才结束状态',async()=>{
+        await committed();const before=snapshot(),row=doc.querySelector('#layer-list .layer-row:not(.is-group)');assert(row,'示例没有可选图层');
+        row.querySelector('.layer-name').click();assert(doc.querySelector('#layer-list .layer-row.selected')?.dataset.id===row.dataset.id,'图层没有选中');
+        const since=win.performance.now();change('mode-select','composite');
+        await until(()=>latestRequest('render',since),'切模式的真实预览请求');
+        await until(()=>!el('canvas-render-status').hidden,'延迟显示的角落重绘提示',280);
+        unchanged(before,'重绘请求期间丢失上一帧');assert(!canvas().hidden&&!paper().hidden,'重绘隐藏了旧画面');
+        assert(el('loading-overlay').hidden,'同一文档重绘出现全画布遮罩');assert(!el('canvas-render-status').hidden,'重绘缺少角落更新提示');
+        assert(viewport().getAttribute('aria-busy')==='true','重绘缺少 busy 状态');
+        change('mode-select','layer');await sleep(30);change('mode-select','original');
+        await committed();assert(el('mode-select').value==='original','最新模式选择丢失');
+        const requests=win.__canvasBrowserCheck.requests.filter(r=>r.type==='render'&&r.queuedAt>=since);assert(requests.length>=2,'连续重绘未处理最新请求');
+        assert(canvas().width===before.width&&canvas().height===before.height,'最终提交仍是中间单层尺寸');
+        return{selectedLayer:row.dataset.id,realRenderRequests:requests.length};
+      });
+      await check('新 PSD 标签独立加载，切回原标签保留画面与视图',async()=>{
+        await committed();const before=snapshot(),oldRect=rect(canvas()),originalId=activeTab()?.dataset.documentId,count=tabs().length;
+        const oldMode=el('mode-select').value,oldSelected=doc.querySelector('#layer-list .layer-row.selected')?.dataset.id;
+        assert(originalId,'没有原始文档标签');await openDemo('独立文档');await sleep(70);
+        const newId=activeTab()?.dataset.documentId;assert(newId&&newId!==originalId,'新文件没有独立标签');
+        assert(tabs().length===count+1&&tabById(originalId),'打开新标签移除了原标签');
+        assert(canvas().hidden&&paper().hidden&&canvas().width===1&&canvas().height===1,'新标签提交首帧前显示了其他文档画面');
+        await until(()=>!el('loading-overlay').hidden&&phase()==='render','独立标签生成预览');
+        assert(canvas().hidden&&paper().hidden,'新标签首帧提交前残留旧画面');await committed();
+        tabById(originalId).querySelector('.document-tab-button').click();await until(()=>activeTab()?.dataset.documentId===originalId,'恢复原标签');await committed();
+        unchanged(before,'切回原标签后画布像素改变');const restored=aligned();
+        for(const key of ['x','y','width','height'])assert(Math.abs(restored[key]-oldRect[key])<.75,`原标签视图 ${key} 未恢复`);
+        assert(el('mode-select').value===oldMode,'原标签预览模式未恢复');
+        assert(doc.querySelector('#layer-list .layer-row.selected')?.dataset.id===oldSelected,'原标签选层未恢复');
+        return{originalId,newId,documentCount:tabs().length,retainedWidth:before.width,retainedHeight:before.height};
+      });
+      await check('通过真实文件输入导入透明 PNG，画布保留原始 alpha',async()=>{
+        importFile(pngFile);await until(()=>el('document-tab').textContent===pngFile.name,'PNG 文档标签');await committed();
+        assert(canvas().width===240&&canvas().height===180,'PNG 尺寸错误');assert(pixel(0,0)[3]===0,'透明区被背景填实');assert(pixel(100,80)[3]===255,'实心图形 alpha 错误');assert(pixel(30,145)[3]===128,'半透明图形 alpha 错误');
+        assert(el('layer-count').textContent==='1','透明 PNG 未作为图片层导入');aligned();
+        return{transparent:pixel(0,0),opaque:pixel(100,80),translucent:pixel(30,145)};
+      });
+      await check('默认 16 px 透明网格锚定纸张，缩放不改变屏幕格子大小',async()=>{
+        await committed();assert(el('checker-size-select').value==='medium','默认透明网格不是中号');
+        const style=win.getComputedStyle(paper());assert(style.backgroundSize==='16px 16px',`默认网格周期是 ${style.backgroundSize}`);assert(style.backgroundImage!=='none','纸张缺少透明网格');
+        assert(style.backgroundPosition.split(' ').every(value=>parseFloat(value)===0),`网格未从纸张原点开始：${style.backgroundPosition}`);
+        assert(win.getComputedStyle(viewport()).backgroundImage==='none','工作区背景仍绘制了透明网格');
+        el('actual-btn').click();await settle();aligned();assert(win.getComputedStyle(paper()).backgroundSize==='16px 16px','实际大小改变了屏幕网格周期');
+        el('fit-btn').click();await settle();aligned();assert(win.getComputedStyle(paper()).backgroundSize==='16px 16px','适应窗口改变了屏幕网格周期');
+        return{size:style.backgroundSize,position:style.backgroundPosition};
+      });
+      await check('切换和关闭透明网格只改变显示，画布像素及 PNG alpha 不变',async()=>{
+        await committed();const before=snapshot(),png=canvas().toDataURL('image/png'),sizes={small:'8px 8px',medium:'16px 16px',large:'32px 32px'};
+        for(const value of ['small','large','none','medium']){
+          change('checker-size-select',value);await settle();const style=win.getComputedStyle(paper());
+          if(value==='none')assert(style.backgroundImage==='none','关闭网格后仍有格子');else assert(style.backgroundSize===sizes[value],`${value} 网格周期错误：${style.backgroundSize}`);
+          unchanged(before,`${value} 网格设置改变了画布像素`);assert(canvas().toDataURL('image/png')===png,'网格设置改变了画布 PNG 编码');aligned();
+        }
+        const image=await win.createImageBitmap(await(await fetch(png)).blob());const probe=document.createElement('canvas');probe.width=image.width;probe.height=image.height;probe.getContext('2d').drawImage(image,0,0);image.close();
+        assert(probe.getContext('2d').getImageData(0,0,1,1).data[3]===0,'画布 PNG 数据丢失透明 alpha');
+        return{pngAlpha:0,gridOptions:['small','large','none','medium']};
+      });
+      await check('工作区四种背景立即生效，均不改变画布与透明像素',async()=>{
+        await committed();const before=snapshot(),png=canvas().toDataURL('image/png'),colors={};
+        for(const value of ['medium','light','black','dark']){change('canvas-background-select',value);await settle();colors[value]=win.getComputedStyle(viewport()).backgroundColor;unchanged(before,`${value} 背景改变了画布像素`);assert(canvas().toDataURL('image/png')===png,'背景设置改变了 PNG 编码');}
+        assert(new Set(Object.values(colors)).size===4,'四种工作区背景没有产生四种颜色');assert(colors.black==='rgb(20, 20, 20)','黑色背景错误');return colors;
+      });
+      await check('取消只关闭当前读取标签，邻页恢复且不受迟到帧影响',async()=>{
+        await committed();const before=snapshot(),previousId=activeTab()?.dataset.documentId,count=tabs().length;
+        assert(previousId,'没有可恢复的图片标签');await openDemo('取消文档');const cancelledId=activeTab()?.dataset.documentId;
+        assert(cancelledId&&cancelledId!==previousId,'待取消文件没有新标签');await until(()=>!el('loading-overlay').hidden,'可取消的读取卡');assert(phase()==='read','未在读取阶段取消');
+        assert(canvas().hidden&&paper().hidden,'正在读取的新标签显示了其他文档画面');el('cancel-btn').click();
+        await until(()=>!tabById(cancelledId)&&activeTab()?.dataset.documentId===previousId,'取消后邻页接管');await committed();
+        assert(tabs().length===count,'取消误删其他文档标签');unchanged(before,'取消后邻页恢复的像素不正确');aligned();
+        assert(el('layer-count').textContent==='1'&&pixel(0,0)[3]===0,'取消后恢复的不是原透明图片');
+        await sleep(750);assert(!tabById(cancelledId)&&activeTab()?.dataset.documentId===previousId,'迟到请求恢复了已取消标签');
+        assert(idle(),'迟到请求改变了邻页 busy 状态');unchanged(before,'迟到请求污染了邻页画面');
+        return{cancelledId,restoredId:previousId,documentCount:tabs().length,lateFrameObservationMs:750};
+      });
+      await check('取消后仍可重新导入，最后保留透明网格预览',async()=>{
+        const reopened=new win.File([pngFile],'取消后重新导入.png',{type:'image/png',lastModified:0}),count=tabs().length;
+        importFile(reopened);await until(()=>el('document-tab').textContent===reopened.name,'取消后的 PNG 标签');await committed();
+        assert(tabs().length===count+1,'取消后没有建立新的图片标签');
+        assert(pixel(0,0)[3]===0&&pixel(100,80)[3]===255,'重新打开后透明 PNG 错误');assert(!paper().hidden,'重新打开后没有纸张');aligned();
+        return{file:reopened.name,documentCount:tabs().length,canvas:rect(canvas()),alphaAtCorner:pixel(0,0)[3]};
+      });
+    }catch(error){await check('验收初始化或流程异常',()=>{throw error;});}
+    finally{busy=false;update();}
+  }
+  $('run').onclick=run;run();
+})();
+</script>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="48" onload="window.__svgUnsafeExecuted=true">
+<script>window.__svgUnsafeExecuted=true;</script>
+<style>@import url("https://example.invalid/svg-test.css"); .external{fill:url("https://example.invalid/svg-test.svg#paint");}</style>
+<rect id="safe-shape" width="64" height="48" fill="#12a55f" onclick="window.__svgUnsafeExecuted=true"><animate attributeName="fill" values="red;blue" dur="1s" repeatCount="indefinite"/></rect>
+<image id="external-image" x="50" y="40" width="1" height="1" href="https://example.invalid/svg-test.png"/>
+<a href="javascript:window.__svgUnsafeExecuted=true"><rect id="linked-shape" x="1" y="1" width="2" height="2" fill="#12a55f"/></a>
+<foreignObject x="0" y="0" width="64" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="width:64px;height:48px;background:red" onload="window.__svgUnsafeExecuted=true">unsafe</div></foreignObject>
+</svg>

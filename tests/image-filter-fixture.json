@@ -1,0 +1,38 @@
+{
+  "width": 320,
+  "height": 240,
+  "files": [
+    "image-filter-probe.png",
+    "image-filter-alternate.png"
+  ],
+  "probes": {
+    "transparent": [
+      0,
+      0
+    ],
+    "neutralLow": [
+      40,
+      44
+    ],
+    "neutralHigh": [
+      174,
+      44
+    ],
+    "neutralMiddle": [
+      105,
+      44
+    ],
+    "red": [
+      58,
+      136
+    ],
+    "translucent": [
+      258,
+      55
+    ],
+    "softEdge": [
+      240,
+      154
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const built=spawnSync(process.execPath,['build.mjs'],{cwd:root,stdio:'inherit'});
+if(built.status!==0)process.exit(built.status??1);
+const {version}=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+const target=path.join(root,'release',`mojing-studio-v${version}`);fs.mkdirSync(target,{recursive:true});
+for(const [source,name] of [['dist/墨境Studio.html','墨境Studio.html'],['LICENSE','LICENSE'],['THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md'],['README.md','README.md'],['README.en.md','README.en.md'],['CONTRIBUTING.md','CONTRIBUTING.md'],['CHANGELOG.md','CHANGELOG.md']])fs.copyFileSync(path.join(root,source),path.join(target,name));
+fs.cpSync(path.join(root,'docs'),path.join(target,'docs'),{recursive:true});
+fs.cpSync(path.join(root,'vendor/licenses'),path.join(target,'third-party-licenses'),{recursive:true});
+fs.copyFileSync(path.join(root,'vendor/ag-psd.LICENSE'),path.join(target,'third-party-licenses','ag-psd.MIT.txt'));
+console.log(`Release files ready: ${path.relative(root,target)}`);
