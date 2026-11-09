@@ -2,9 +2,15 @@
 
 **An offline PSD / SVG viewer and local image workbench in one HTML file.** Inspect layers, click artwork to select a layer, export assets, or adjust ordinary images. Files are processed in your browser.
 
-[简体中文](README.md) · [Release guide](docs/PUBLISHING.md)
+[简体中文](README.md) · [GitHub repository](https://github.com/yierzaizhe/mojing-studio) · [Release guide](docs/PUBLISHING.md)
 
 ![Workspace](docs/workspace.jpg)
+
+## Download and use
+
+[Download v1.0.0 HTML](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/%E5%A2%A8%E5%A2%83Studio.html) · [Download offline ZIP](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/mojing-studio-v1.0.0-offline.zip) · [v1.0.0 release page](https://github.com/yierzaizhe/mojing-studio/releases/tag/v1.0.0)
+
+Open the downloaded `墨境Studio.html` in a recent desktop Chrome or Edge. The ZIP includes the same HTML, usage documentation and licenses; extract it before opening the HTML. Use the open button or drop supported files into the workspace. No installation or account is needed to use the downloaded tool.
 
 ## Features
 
