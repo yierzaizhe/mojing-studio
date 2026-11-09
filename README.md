@@ -8,9 +8,9 @@
 
 ## 开始使用
 
-[下载 v1.0.0 单文件 HTML](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/%E5%A2%A8%E5%A2%83Studio.html) · [下载离线 ZIP](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/mojing-studio-v1.0.0-offline.zip) · [v1.0.0 Release 页面](https://github.com/yierzaizhe/mojing-studio/releases/tag/v1.0.0)
+[下载 v1.0.0 单文件 HTML](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/mojing-studio-v1.0.0.html) · [下载离线 ZIP](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/mojing-studio-v1.0.0-offline.zip) · [v1.0.0 Release 页面](https://github.com/yierzaizhe/mojing-studio/releases/tag/v1.0.0)
 
-下载 `墨境Studio.html` 后，用近期桌面 Chrome / Edge 打开；ZIP 另附使用说明和许可证，解压后打开其中的同名 HTML。通过“打开文件”或拖放导入 PSD、PSB、SVG、PNG、JPG、WebP、GIF、BMP、AVIF；具体图片解码格式取决于浏览器。可一次导入多份文件，每份文件有独立标签。
+下载 `mojing-studio-v1.0.0.html` 后，用近期桌面 Chrome / Edge 打开；ZIP 另附使用说明和许可证，解压后打开其中的 `墨境Studio.html`。通过“打开文件”或拖放导入 PSD、PSB、SVG、PNG、JPG、WebP、GIF、BMP、AVIF；具体图片解码格式取决于浏览器。可一次导入多份文件，每份文件有独立标签。
 
 若浏览器限制直接打开本地文件中的 Worker，可用下方开发命令启动仅本机可访问的预览服务。
 

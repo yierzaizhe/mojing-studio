@@ -38,4 +38,13 @@
 
 ## 验证范围
 
-本次没有覆盖所有操作系统、浏览器版本、设计软件生成的文件或直接 `file://` 打开方式。复杂 PSD/SVG 的还原限制见 README。GitHub CI 配置已准备，本次未创建远程仓库、推送或在 GitHub 执行 CI。
+本次没有覆盖所有操作系统、浏览器版本、设计软件生成的文件或直接 `file://` 打开方式。复杂 PSD/SVG 的还原限制见 README。上述本机验证记录完成于首次推送之前。后续 GitHub 上的验证如下。
+
+## GitHub 检查
+
+2026-11-09，公开仓库首次推送后，以下构建与自动测试均通过：
+
+- `main` 的 `0bb3d845b4eeea5dadb7eee3ab35d7e41b568d24`：[Actions 记录](https://github.com/yierzaizhe/mojing-studio/actions/runs/42547888140)。
+- `v1.0.0` 的 `ed99982c07d7961de82e1d3e5632b2dd62125b75`：[Actions 记录](https://github.com/yierzaizhe/mojing-studio/actions/runs/42547970062)。
+
+GitHub CI 验证 Node.js 22 / 24 下的构建及 Node 测试，不自动执行浏览器验收。

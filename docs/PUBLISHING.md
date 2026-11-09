@@ -39,9 +39,9 @@ git push -u origin main
 npm run release
 ```
 
-发布目录为 `release/mojing-studio-v1.0.0/`，包含独立 HTML、使用说明、截图和第三方许可证。将完整目录压缩为 `mojing-studio-v1.0.0-offline.zip`，在本仓库创建标签为 `v1.0.0` 的 Release，并上传两个附件：
+发布目录为 `release/mojing-studio-v1.0.0/`，包含独立 HTML、使用说明、截图和第三方许可证。ZIP 内保留 `墨境Studio.html` 文件名；将完整目录压缩为 `mojing-studio-v1.0.0-offline.zip`，并将独立 HTML 的发布副本命名为 `mojing-studio-v1.0.0.html`。在本仓库创建标签为 `v1.0.0` 的 Release，上传两个附件：
 
-- `墨境Studio.html`：[单文件下载地址](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/%E5%A2%A8%E5%A2%83Studio.html)。
+- `mojing-studio-v1.0.0.html`：[单文件下载地址](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/mojing-studio-v1.0.0.html)。
 - `mojing-studio-v1.0.0-offline.zip`：[离线 ZIP 下载地址](https://github.com/yierzaizhe/mojing-studio/releases/download/v1.0.0/mojing-studio-v1.0.0-offline.zip)。
 
 [v1.0.0 Release 页面](https://github.com/yierzaizhe/mojing-studio/releases/tag/v1.0.0)。上述地址在对应 Release 和附件发布后生效；发布后核对附件名称、下载内容及许可证，再确认 README 中的下载入口可用。
